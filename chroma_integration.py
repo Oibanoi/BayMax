@@ -34,14 +34,14 @@ class MedicalChromaDB:
         
         # Mock data for symptoms
         symptoms_data = [
-            {"id": str(uuid.uuid4()), "text": "Persistent headache, dizziness, nausea", "category": "neurological", "severity": "moderate"},
-            {"id": str(uuid.uuid4()), "text": "Dry cough, shortness of breath, chest pain", "category": "respiratory", "severity": "severe"},
-            {"id": str(uuid.uuid4()), "text": "Abdominal pain, diarrhea, nausea", "category": "gastrointestinal", "severity": "mild"},
-            {"id": str(uuid.uuid4()), "text": "High fever, chills, muscle pain", "category": "infectious", "severity": "severe"},
-            {"id": str(uuid.uuid4()), "text": "Fatigue, loss of appetite, weight loss", "category": "systemic", "severity": "moderate"},
-            {"id": str(uuid.uuid4()), "text": "Joint pain, joint swelling, morning stiffness", "category": "musculoskeletal", "severity": "moderate"},
-            {"id": str(uuid.uuid4()), "text": "Left chest pain, palpitations, shortness of breath", "category": "cardiovascular", "severity": "severe"},
-            {"id": str(uuid.uuid4()), "text": "Red rash, itching, swelling", "category": "dermatological", "severity": "mild"}
+            {"id": str(uuid.uuid4()), "text": "Đau đầu kéo dài, chóng mặt, buồn nôn", "category": "neurological", "severity": "moderate"},
+            {"id": str(uuid.uuid4()), "text": "Ho khan, khó thở, đau ngực", "category": "respiratory", "severity": "severe"},
+            {"id": str(uuid.uuid4()), "text": "Đau bụng, tiêu chảy, buồn nôn", "category": "gastrointestinal", "severity": "mild"},
+            {"id": str(uuid.uuid4()), "text": "Sốt cao, ớn lạnh, đau cơ", "category": "infectious", "severity": "severe"},
+            {"id": str(uuid.uuid4()), "text": "Mệt mỏi, chán ăn, sụt cân", "category": "systemic", "severity": "moderate"},
+            {"id": str(uuid.uuid4()), "text": "Đau khớp, sưng khớp, cứng khớp buổi sáng", "category": "musculoskeletal", "severity": "moderate"},
+            {"id": str(uuid.uuid4()), "text": "Đau ngực trái, hồi hộp, khó thở", "category": "cardiovascular", "severity": "severe"},
+            {"id": str(uuid.uuid4()), "text": "Nổi mẩn đỏ, ngứa, sưng", "category": "dermatological", "severity": "mild"}
         ]
         
         self.symptoms_collection.add(
@@ -52,14 +52,14 @@ class MedicalChromaDB:
         
         # Mock data for drug groups
         drug_groups_data = [
-            {"id": str(uuid.uuid4()), "text": "Paracetamol - Pain reliever, fever reducer. Dosage: 500mg x 3 times/day", "group": "analgesic_antipyretic", "usage": "take_after_meals"},
-            {"id": str(uuid.uuid4()), "text": "Amoxicillin - Penicillin group antibiotic. Dosage: 500mg x 3 times/day", "group": "antibiotic", "usage": "take_1h_before_meals"},
-            {"id": str(uuid.uuid4()), "text": "Omeprazole - Proton pump inhibitor. Dosage: 20mg x 1 time/day", "group": "gastric", "usage": "take_morning_empty_stomach"},
-            {"id": str(uuid.uuid4()), "text": "Metformin - Type 2 diabetes treatment. Dosage: 500mg x 2 times/day", "group": "diabetes", "usage": "take_with_meals"},
-            {"id": str(uuid.uuid4()), "text": "Amlodipine - CCB group antihypertensive. Dosage: 5mg x 1 time/day", "group": "hypertension", "usage": "take_morning"},
-            {"id": str(uuid.uuid4()), "text": "Cetirizine - H1 antihistamine. Dosage: 10mg x 1 time/day", "group": "allergy", "usage": "take_evening"},
-            {"id": str(uuid.uuid4()), "text": "Ibuprofen - Non-steroidal anti-inflammatory. Dosage: 400mg x 3 times/day", "group": "anti_inflammatory", "usage": "take_after_meals"},
-            {"id": str(uuid.uuid4()), "text": "Simvastatin - Statin group cholesterol lowering. Dosage: 20mg x 1 time/day", "group": "blood_lipid", "usage": "take_evening"}
+            {"id": str(uuid.uuid4()), "text": "Paracetamol - Thuốc giảm đau, hạ sốt. Liều dùng: 500mg x 3 lần/ngày", "group": "analgesic_antipyretic", "usage": "take_after_meals"},
+            {"id": str(uuid.uuid4()), "text": "Amoxicillin - Kháng sinh nhóm penicillin. Liều dùng: 500mg x 3 lần/ngày", "group": "antibiotic", "usage": "take_1h_before_meals"},
+            {"id": str(uuid.uuid4()), "text": "Omeprazole - Thuốc ức chế bơm proton. Liều dùng: 20mg x 1 lần/ngày", "group": "gastric", "usage": "take_morning_empty_stomach"},
+            {"id": str(uuid.uuid4()), "text": "Metformin - Thuốc điều trị tiểu đường type 2. Liều dùng: 500mg x 2 lần/ngày", "group": "diabetes", "usage": "take_with_meals"},
+            {"id": str(uuid.uuid4()), "text": "Amlodipine - Thuốc hạ huyết áp nhóm CCB. Liều dùng: 5mg x 1 lần/ngày", "group": "hypertension", "usage": "take_morning"},
+            {"id": str(uuid.uuid4()), "text": "Cetirizine - Thuốc kháng histamin H1. Liều dùng: 10mg x 1 lần/ngày", "group": "allergy", "usage": "take_evening"},
+            {"id": str(uuid.uuid4()), "text": "Ibuprofen - Thuốc chống viêm không steroid. Liều dùng: 400mg x 3 lần/ngày", "group": "anti_inflammatory", "usage": "take_after_meals"},
+            {"id": str(uuid.uuid4()), "text": "Simvastatin - Thuốc hạ cholesterol nhóm statin. Liều dùng: 20mg x 1 lần/ngày", "group": "blood_lipid", "usage": "take_evening"}
         ]
         
         self.drug_groups_collection.add(
@@ -70,14 +70,14 @@ class MedicalChromaDB:
         
         # Mock data for lab results
         lab_results_data = [
-            {"id": str(uuid.uuid4()), "text": "Fasting glucose: 126 mg/dL (normal: 70-100). High level, suspected diabetes", "test_type": "blood_chemistry", "status": "high"},
-            {"id": str(uuid.uuid4()), "text": "Total cholesterol: 240 mg/dL (normal: <200). Cardiovascular risk", "test_type": "blood_lipid", "status": "high"},
-            {"id": str(uuid.uuid4()), "text": "Hemoglobin: 9.5 g/dL (normal: 12-15). Mild anemia", "test_type": "complete_blood_count", "status": "low"},
-            {"id": str(uuid.uuid4()), "text": "ALT: 65 U/L (normal: <40). Abnormal liver function", "test_type": "liver_function", "status": "high"},
-            {"id": str(uuid.uuid4()), "text": "Creatinine: 1.8 mg/dL (normal: 0.6-1.2). Decreased kidney function", "test_type": "kidney_function", "status": "high"},
-            {"id": str(uuid.uuid4()), "text": "TSH: 8.5 mIU/L (normal: 0.4-4.0). Hypothyroidism", "test_type": "thyroid_hormone", "status": "high"},
-            {"id": str(uuid.uuid4()), "text": "HbA1c: 8.2% (normal: <5.7%). Poor glycemic control", "test_type": "diabetes", "status": "high"},
-            {"id": str(uuid.uuid4()), "text": "CRP: 15 mg/L (normal: <3). Acute inflammation", "test_type": "inflammation", "status": "high"}
+            {"id": str(uuid.uuid4()), "text": "Glucose máu đói: 126 mg/dL (bình thường: 70-100). Chỉ số cao, nghi ngờ tiểu đường", "test_type": "blood_chemistry", "status": "high"},
+            {"id": str(uuid.uuid4()), "text": "Cholesterol toàn phần: 240 mg/dL (bình thường: <200). Nguy cơ tim mạch", "test_type": "blood_lipid", "status": "high"},
+            {"id": str(uuid.uuid4()), "text": "Hemoglobin: 9.5 g/dL (bình thường: 12-15). Thiếu máu nhẹ", "test_type": "complete_blood_count", "status": "low"},
+            {"id": str(uuid.uuid4()), "text": "ALT: 65 U/L (bình thường: <40). Chức năng gan bất thường", "test_type": "liver_function", "status": "high"},
+            {"id": str(uuid.uuid4()), "text": "Creatinine: 1.8 mg/dL (bình thường: 0.6-1.2). Chức năng thận giảm", "test_type": "kidney_function", "status": "high"},
+            {"id": str(uuid.uuid4()), "text": "TSH: 8.5 mIU/L (bình thường: 0.4-4.0). Suy giáp", "test_type": "thyroid_hormone", "status": "high"},
+            {"id": str(uuid.uuid4()), "text": "HbA1c: 8.2% (bình thường: <5.7%). Kiểm soát đường huyết kém", "test_type": "diabetes", "status": "high"},
+            {"id": str(uuid.uuid4()), "text": "CRP: 15 mg/L (bình thường: <3). Viêm nhiễm cấp tính", "test_type": "inflammation", "status": "high"}
         ]
         
         self.lab_results_collection.add(
@@ -113,13 +113,13 @@ if __name__ == "__main__":
     
     # Test search
     print("=== Test symptoms search ===")
-    results = db.search_symptoms("headache dizziness")
+    results = db.search_symptoms("đau đầu chóng mặt")
     print(results)
     
     print("\n=== Test drug search ===")
-    results = db.search_drug_groups("pain reliever")
+    results = db.search_drug_groups("thuốc giảm đau")
     print(results)
     
     print("\n=== Test lab results search ===")
-    results = db.search_lab_results("high glucose")
+    results = db.search_lab_results("đường huyết cao")
     print(results)
