@@ -10,10 +10,13 @@ from typing import List, Dict, Any
 import pandas as pd
 from dotenv import load_dotenv
 from chroma_integration import MedicalChromaDB
+import text_to_speech
  
 # # Load environment variables
 load_dotenv()
- 
+# Setup session_state for audio caching
+if "audio_bytes" not in st.session_state:
+    st.session_state.audio_bytes = None
 # Page configuration
 st.set_page_config(
     page_title="MedGuide AI - Trợ lý Y tế Thông minh",
@@ -27,8 +30,8 @@ class MedGuideAI:
         # Initialize Azure OpenAI client
         self.client = AzureOpenAI(
             api_version="2024-07-01-preview",
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            azure_endpoint="https://aiportalapi.stu-platform.live/jpe",
+            api_key="sk-dEyinSJuZ8V_u8gKuPksuA",
         )
         
         # Initialize ChromaDB
@@ -272,6 +275,11 @@ Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là 
             )
             
             ai_response = response.choices[0].message.content
+
+            # # thong's code start
+            print("ai_response: " + ai_response)
+            st.session_state.audio_bytes = text_to_speech.run_audio(ai_response)
+            # # thong's code end
             
             # Add to conversation history
             self.add_conversation("user", user_input)
@@ -768,7 +776,7 @@ def main():
        
         # Create form for better UX (closest to Enter behavior)
         with st.form(key="chat_input_form", clear_on_submit=True):
-            col1, col2 = st.columns([4, 1])
+            col1, col2 = st.columns([4, 2])
            
             with col1:
                 # Use text_input for single line (more chat-like)
@@ -781,7 +789,7 @@ def main():
            
             with col2:
                 # Combined controls in smaller space
-                col_send, col_options = st.columns([1, 1])
+                col_send, col_options, col_output_settings = st.columns([1, 1, 1])
                 with col_send:
                     send_message = st.form_submit_button("📤", help="Gửi tin nhắn", use_container_width=True)
                 with col_options:
@@ -793,6 +801,14 @@ def main():
                             help="Tối ưu AI theo loại câu hỏi",
                             key="chat_query_type"
                         )
+                with col_output_settings:
+                    with st.expander("⚙️"):
+                        st.selectbox(
+                            "Đầu ra:",
+                            ["Text", "Âm thanh"],
+                            key="chat_output_type"
+                        )
+                    pass
        
         # Image upload and additional controls outside form
         col1, col2, col3 = st.columns([2, 1, 1])
@@ -1010,6 +1026,8 @@ def main():
                         "timestamp": datetime.now().isoformat()
                     })
                     st.rerun()
+        print("thong jump here")
+        st.audio(st.session_state.audio_bytes, format="audio/mp3")
     elif page == "🩺 Tư vấn triệu chứng":
         st.header("🩺 Tư vấn triệu chứng")
        
