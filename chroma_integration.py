@@ -1,6 +1,13 @@
 import chromadb
 from chromadb.config import Settings
 import uuid
+import re
+from typing import List, Dict, Tuple
+from openai import AzureOpenAI
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 class MedicalChromaDB:
     def __init__(self, persist_directory="./chroma_db"):
@@ -27,7 +34,9 @@ class MedicalChromaDB:
             metadata={"description": "Laboratory test results"}
         )
         
-        self.insert_mock_data()
+        # Only insert mock data if collections are empty
+        if self.symptoms_collection.count() == 0:
+            self.insert_mock_data()
     
     def insert_mock_data(self):
         """Insert mock data into collections"""
@@ -106,6 +115,177 @@ class MedicalChromaDB:
             query_texts=[query],
             n_results=n_results
         )
+    
+    def split_text_into_chunks(self, text: str, chunk_size: int = 500) -> List[str]:
+        """Split text into smaller chunks for processing"""
+        # Split by sentences first
+        sentences = re.split(r'[.!?]\s+', text)
+        
+        chunks = []
+        current_chunk = ""
+        
+        for sentence in sentences:
+            if len(current_chunk + sentence) < chunk_size:
+                current_chunk += sentence + ". "
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence + ". "
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        return chunks
+    
+    def classify_text_chunk(self, text_chunk: str) -> str:
+        """Classify text chunk into symptoms, drug_groups, or lab_results"""
+        try:
+            client = AzureOpenAI(
+                api_version="2024-07-01-preview",
+                azure_endpoint="https://aiportalapi.stu-platform.live/jpe",
+                api_key="sk-dEyinSJuZ8V_u8gKuPksuA",
+            )
+            
+            classification_prompt = f"""
+Classify the following medical text into one of these categories:
+- symptoms: Text about symptoms, signs, medical conditions, patient complaints
+- drug_groups: Text about medications, drugs, prescriptions, dosages, drug information
+- lab_results: Text about test results, lab values, medical examinations, diagnostic results
+
+Text: "{text_chunk}"
+
+Return only the category name (symptoms/drug_groups/lab_results).
+"""
+            
+            response = client.chat.completions.create(
+                model="GPT-4o-mini",
+                messages=[{"role": "user", "content": classification_prompt}],
+                max_tokens=50,
+                temperature=0
+            )
+            
+            category = response.choices[0].message.content.strip().lower()
+            return category if category in ['symptoms', 'drug_groups', 'lab_results'] else 'symptoms'
+            
+        except Exception as e:
+            print(f"Classification error: {e}")
+            return 'symptoms'  # Default fallback
+    
+    def add_file_content_to_db(self, file_content: str, source_filename: str = "user_upload") -> Dict[str, int]:
+        """Process file content and add to appropriate collections"""
+        # Split text into chunks
+        chunks = self.split_text_into_chunks(file_content)
+        
+        # Track additions
+        additions = {"symptoms": 0, "drug_groups": 0, "lab_results": 0}
+        
+        for i, chunk in enumerate(chunks):
+            if len(chunk.strip()) < 20:  # Skip very short chunks
+                continue
+                
+            # Classify chunk
+            category = self.classify_text_chunk(chunk)
+            
+            # Generate metadata
+            metadata = {
+                "source": source_filename,
+                "chunk_index": i,
+                "category": "user_uploaded"
+            }
+            
+            # Add to appropriate collection
+            chunk_id = str(uuid.uuid4())
+            
+            if category == "symptoms":
+                self.symptoms_collection.add(
+                    documents=[chunk],
+                    metadatas=[{**metadata, "severity": "unknown"}],
+                    ids=[chunk_id]
+                )
+                additions["symptoms"] += 1
+                
+            elif category == "drug_groups":
+                self.drug_groups_collection.add(
+                    documents=[chunk],
+                    metadatas=[{**metadata, "group": "user_uploaded", "usage": "unknown"}],
+                    ids=[chunk_id]
+                )
+                additions["drug_groups"] += 1
+                
+            else:  # lab_results
+                self.lab_results_collection.add(
+                    documents=[chunk],
+                    metadatas=[{**metadata, "test_type": "user_uploaded", "status": "unknown"}],
+                    ids=[chunk_id]
+                )
+                additions["lab_results"] += 1
+        
+        return additions
+    
+    def process_uploaded_file(self, file_path: str) -> Dict[str, int]:
+        """Process uploaded file and add content to ChromaDB"""
+        try:
+            # Read file content
+            with open(file_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+            
+            filename = os.path.basename(file_path)
+            return self.add_file_content_to_db(content, filename)
+            
+        except Exception as e:
+            print(f"Error processing file: {e}")
+            return {"symptoms": 0, "drug_groups": 0, "lab_results": 0}
+    
+    def get_collection_stats(self) -> Dict[str, int]:
+        """Get statistics of all collections"""
+        return {
+            "symptoms": self.symptoms_collection.count(),
+            "drug_groups": self.drug_groups_collection.count(),
+            "lab_results": self.lab_results_collection.count()
+        }
+    
+    def add_to_specific_collection(self, content: str, filename: str, collection_type: str) -> Dict[str, int]:
+        """Add content directly to specific collection without AI classification"""
+        chunks = self.split_text_into_chunks(content)
+        additions = {"symptoms": 0, "drug_groups": 0, "lab_results": 0}
+        
+        for i, chunk in enumerate(chunks):
+            if len(chunk.strip()) < 20:
+                continue
+                
+            metadata = {
+                "source": filename,
+                "chunk_index": i,
+                "category": "manual_upload"
+            }
+            
+            chunk_id = str(uuid.uuid4())
+            
+            if collection_type == "symptoms":
+                self.symptoms_collection.add(
+                    documents=[chunk],
+                    metadatas=[{**metadata, "severity": "unknown"}],
+                    ids=[chunk_id]
+                )
+                additions["symptoms"] += 1
+                
+            elif collection_type == "drug_groups":
+                self.drug_groups_collection.add(
+                    documents=[chunk],
+                    metadatas=[{**metadata, "group": "manual_upload", "usage": "unknown"}],
+                    ids=[chunk_id]
+                )
+                additions["drug_groups"] += 1
+                
+            elif collection_type == "lab_results":
+                self.lab_results_collection.add(
+                    documents=[chunk],
+                    metadatas=[{**metadata, "test_type": "manual_upload", "status": "unknown"}],
+                    ids=[chunk_id]
+                )
+                additions["lab_results"] += 1
+        
+        return additions
 
 # Test function
 if __name__ == "__main__":
@@ -123,3 +303,18 @@ if __name__ == "__main__":
     print("\n=== Test lab results search ===")
     results = db.search_lab_results("đường huyết cao")
     print(results)
+    
+    # Test file processing
+    print("\n=== Test file processing ===")
+    sample_text = """
+    Bệnh nhân than phiền đau đầu kéo dài 3 ngày, kèm theo chóng mặt và buồn nôn.
+    Đã sử dụng Paracetamol 500mg x 2 lần/ngày nhưng chưa thấy cải thiện.
+    Kết quả xét nghiệm cho thấy glucose máu đói: 140 mg/dL, cao hơn bình thường.
+    """
+    
+    additions = db.add_file_content_to_db(sample_text, "test_file.txt")
+    print(f"Added to collections: {additions}")
+    
+    print("\n=== Collection stats ===")
+    stats = db.get_collection_stats()
+    print(f"Collection sizes: {stats}")

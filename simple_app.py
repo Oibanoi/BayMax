@@ -226,6 +226,59 @@ def main():
         
         st.rerun()
     
+    # File upload section for ChromaDB
+    with st.sidebar:
+        st.markdown("### 📁 Thêm tài liệu y tế")
+        
+        # Collection selection
+        collection_choice = st.selectbox(
+            "Chọn loại tài liệu:",
+            ["Tự động phân loại", "Triệu chứng", "Thuốc", "Xét nghiệm"],
+            help="AI sẽ tự động phân loại hoặc bạn có thể chọn trước"
+        )
+        
+        # File uploader
+        doc_file = st.file_uploader(
+            "Upload file (.txt, .pdf, .docx):",
+            type=['txt', 'pdf', 'docx'],
+            help="Tài liệu y tế để bổ sung cơ sở dữ liệu"
+        )
+        
+        if doc_file and st.button("📤 Thêm vào cơ sở dữ liệu", use_container_width=True):
+            with st.spinner("Đang xử lý tài liệu..."):
+                try:
+                    # Read file content
+                    if doc_file.type == "text/plain":
+                        content = str(doc_file.read(), "utf-8")
+                    else:
+                        st.error("Hiện tại chỉ hỗ trợ file .txt")
+                        content = None
+                    
+                    if content:
+                        # Process with ChromaDB
+                        if collection_choice == "Tự động phân loại":
+                            additions = ai.chroma_db.add_file_content_to_db(content, doc_file.name)
+                        else:
+                            # Manual classification
+                            collection_map = {
+                                "Triệu chứng": "symptoms",
+                                "Thuốc": "drug_groups", 
+                                "Xét nghiệm": "lab_results"
+                            }
+                            target_collection = collection_map[collection_choice]
+                            additions = ai.chroma_db.add_to_specific_collection(content, doc_file.name, target_collection)
+                        
+                        st.success(f"✅ Đã thêm: {additions}")
+                        
+                        # Show collection stats
+                        stats = ai.chroma_db.get_collection_stats()
+                        st.info(f"📊 Tổng: Triệu chứng({stats['symptoms']}), Thuốc({stats['drug_groups']}), XN({stats['lab_results']})")
+                        
+                except Exception as e:
+                    st.error(f"❌ Lỗi: {str(e)}")
+        
+        st.markdown("---")
+    
     # Quick actions - always show for easy access  
     st.markdown("### 🚀 Câu hỏi mẫu:")
     col1, col2, col3 = st.columns(3)
