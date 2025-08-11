@@ -728,15 +728,11 @@ def main():
    
     # Main content based on selected page
     if page == "🏥 Phân tích Y tế Tổng hợp":
-        st.header("🏥 MedGuide AI - Trợ lý Y tế Tổng hợp")
-        st.markdown("### 💬 Chat với AI và phân tích hình ảnh y tế")
        
         # Initialize chat history in session state
         if 'chat_messages' not in st.session_state:
             st.session_state.chat_messages = []
        
-        # Display chat history
-        st.markdown("### � Lịch sử hội thoại")
        
         # Chat container with scrollable area
         chat_container = st.container()
@@ -996,37 +992,6 @@ def main():
             - Kéo thả hình ảnh vào 📷 để phân tích kèm theo
             """)
            
-            # Quick start suggestions
-            st.markdown("### 🚀 Gợi ý câu hỏi:")
-            col1, col2, col3 = st.columns(3)
-           
-            with col1:
-                if st.button("💊 Hỏi về thuốc", help="Ví dụ về phân tích đơn thuốc"):
-                    st.session_state.chat_messages.append({
-                        "role": "user",
-                        "content": "Paracetamol có tác dụng gì và cách dùng như thế nào?",
-                        "timestamp": datetime.now().isoformat()
-                    })
-                    st.rerun()
-           
-            with col2:
-                if st.button("🧪 Hỏi về xét nghiệm", help="Ví dụ về phân tích kết quả"):
-                    st.session_state.chat_messages.append({
-                        "role": "user",
-                        "content": "Kết quả glucose của tôi là 150 mg/dL có cao không?",
-                        "timestamp": datetime.now().isoformat()
-                    })
-                    st.rerun()
-           
-            with col3:
-                if st.button("🩺 Hỏi về triệu chứng", help="Ví dụ về tư vấn triệu chứng"):
-                    st.session_state.chat_messages.append({
-                        "role": "user",
-                        "content": "Tôi bị đau đầu và chóng mặt, có thể là bệnh gì?",
-                        "timestamp": datetime.now().isoformat()
-                    })
-                    st.rerun()
-        print("thong jump here")
         st.audio(st.session_state.audio_bytes, format="audio/mp3")
     elif page == "🩺 Tư vấn triệu chứng":
         st.header("🩺 Tư vấn triệu chứng")

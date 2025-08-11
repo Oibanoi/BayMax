@@ -1,0 +1,268 @@
+import streamlit as st
+import os
+from datetime import datetime
+from PIL import Image
+from main import MedGuideAI
+import text_to_speech
+
+# Page configuration
+st.set_page_config(
+    page_title="MedGuide AI",
+    page_icon="🏥",
+    layout="centered"
+)
+
+# Initialize AI
+@st.cache_resource
+def load_ai():
+    return MedGuideAI()
+
+def main():
+    # Header
+    st.title("🏥 MedGuide AI")
+    st.markdown("### Tư vấn y tế thông minh với AI")
+    
+    # Initialize
+    ai = load_ai()
+    
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+    if 'processing' not in st.session_state:
+        st.session_state.processing = False
+
+    if 'conversation_history' not in st.session_state:
+        st.session_state.conversation_history = []
+    if 'patient_context' not in st.session_state:
+        st.session_state.patient_context = {
+            "medical_history": [],
+            "medications": [],
+            "allergies": [],
+            "symptoms_timeline": []
+        }
+    if 'processing_image' not in st.session_state:
+        st.session_state.processing_image = False
+    if 'temp_image' not in st.session_state:
+        st.session_state.temp_image = None
+    
+    # Welcome message - show full intro on first visit, short version afterwards
+    if not st.session_state.messages:
+        st.info("""
+            👋 **Chào mừng đến với MedGuide AI!**
+           
+            🗣️ **Bạn có thể:**
+            - Hỏi về triệu chứng, thuốc, xét nghiệm
+            - Upload hình ảnh đơn thuốc hoặc kết quả xét nghiệm để phân tích
+            - Trò chuyện liên tục với AI để được tư vấn chi tiết
+           
+            💡 **Cách sử dụng nhanh:**
+            - Nhập câu hỏi và nhấn Enter để gửi
+            - Dùng nút 📷 để gửi hình ảnh y tế
+            - Sử dụng các câu hỏi mẫu bên dưới để bắt đầu
+            """)
+    else:
+        st.info("### Tư vấn y tế thông minh với AI")
+    
+    # Display chat history with container for better scrolling
+    if st.session_state.messages:
+        st.markdown("### 💬 Cuộc trò chuyện")
+        
+        # Create container for chat messages
+        chat_container = st.container()
+        with chat_container:
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.write(message["content"])
+                    
+                    # Show image if exists
+                    if "image" in message:
+                        st.image(message["image"], width=300)
+                    
+                    # Show classification info
+                    if message["role"] == "assistant" and "topic" in message:
+                        topic_icons = {
+                            'symptoms': '🩺',
+                            'drug_groups': '💊', 
+                            'lab_results': '🧪',
+                            'unknown': '❓'
+                        }
+                        st.caption(f"{topic_icons.get(message['topic'], '❓')} {message['topic']}")
+                    
+                    # Add audio player for assistant messages
+                    if message["role"] == "assistant" and "audio" in message:
+                        st.audio(message["audio"], format="audio/mp3")
+    
+    # Show processing indicators right after chat history
+    if st.session_state.get('processing', False):
+        with st.chat_message("assistant"):
+            with st.spinner("🤖 Đang xử lý..."):
+                st.write("🤖 Đang xử lý câu hỏi của bạn...")
+    
+    if st.session_state.get('processing_image', False):
+        with st.chat_message("assistant"):
+            with st.spinner("🔍 Đang phân tích hình ảnh..."):
+                st.write("🔍 Đang phân tích hình ảnh y tế...")
+    
+    # Input section at bottom
+    st.markdown("---")
+    
+    # Combined input area with image upload
+    col1, col2 = st.columns([4, 1])
+    
+    with col1:
+        # Chat input
+        user_text = st.chat_input(
+            placeholder="Nhập câu hỏi y tế... (Enter để gửi)"
+        )
+        text_submit = bool(user_text)
+    
+    with col2:
+        # Use dynamic key to clear file uploader after submit
+        upload_key = f"file_upload_{st.session_state.get('upload_counter', 0)}"
+        uploaded_file = st.file_uploader(
+            "📷",
+            type=['jpg', 'jpeg', 'png'],
+            help="Gửi hình ảnh y tế (đơn thuốc, xét nghiệm...)",
+            key=upload_key,
+            label_visibility="collapsed"
+        )
+    
+    # Show image preview when uploaded
+    if uploaded_file and not st.session_state.get('processing_image', False):
+        col1, col2 = st.columns([1, 3])
+        
+        with col1:
+            st.image(uploaded_file, width=120, caption="Hình ảnh đã chọn")
+        
+        with col2:
+            st.info("📷 Hình ảnh đã chọn! Nhập câu hỏi hoặc nhấn Enter để phân tích.")
+    
+    # Process text input (with or without image)
+    if text_submit and (user_text.strip() or uploaded_file):
+        # Determine content and processing type
+        if uploaded_file:
+            # Image with optional text
+            user_content = user_text.strip() if user_text.strip() else "Phân tích hình ảnh này"
+            st.session_state.messages.append({
+                "role": "user",
+                "content": user_content,
+                "image": uploaded_file
+            })
+            st.session_state.processing_image = True
+            st.session_state.temp_image = uploaded_file
+        else:
+            # Text only
+            st.session_state.messages.append({
+                "role": "user",
+                "content": user_text
+            })
+            st.session_state.processing = True
+        st.rerun()
+    
+    # Handle processing state (background processing)
+    if st.session_state.get('processing', False):
+        # Get the last user message
+        last_user_msg = None
+        for msg in reversed(st.session_state.messages):
+            if msg["role"] == "user":
+                last_user_msg = msg["content"]
+                break
+        
+        if last_user_msg:
+            # Process with AI (no UI here, just processing)
+            result = ai.process_user_query(last_user_msg)
+            
+            if "error" in result:
+                response = f"❌ Lỗi: {result['error']}"
+                topic = "error"
+            else:
+                response = result.get('ai_response', 'Không có phản hồi')
+                topic = result.get('topic_classified', 'unknown')
+                
+                # Generate audio
+                audio_bytes = text_to_speech.run_audio(response)
+            
+            # Add AI response to messages
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": response,
+                "topic": topic,
+                "audio": audio_bytes
+            })
+            
+            # Clear processing state
+            st.session_state.processing = False
+            st.rerun()
+    
+    # Clear file uploader after processing
+    if (text_submit and uploaded_file) or st.session_state.get('processing_image', False):
+        if 'upload_counter' not in st.session_state:
+            st.session_state.upload_counter = 0
+        st.session_state.upload_counter += 1
+    
+    # Handle image processing state (background processing)
+    if st.session_state.get('processing_image', False):
+        # Process with AI (no UI here, just processing)
+        temp_image = st.session_state.temp_image
+        temp_image.seek(0)
+        response = ai.analyze_medical_image(temp_image, "general")
+        
+        # Generate audio
+        audio_bytes = text_to_speech.run_audio(response)
+        
+        # Add AI response to messages
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": response,
+            "topic": "image_analysis",
+            "audio": audio_bytes
+        })
+        
+        # Clear processing state and file uploader
+        st.session_state.processing_image = False
+        st.session_state.temp_image = None
+        if 'upload_counter' not in st.session_state:
+            st.session_state.upload_counter = 0
+        st.session_state.upload_counter += 1
+        
+        st.rerun()
+    
+    # Quick actions - always show for easy access  
+    st.markdown("### 🚀 Câu hỏi mẫu:")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("💊 Hỏi về thuốc"):
+            st.session_state.messages.append({
+                "role": "user",
+                "content": "Paracetamol có tác dụng gì?"
+            })
+            st.rerun()
+    
+    with col2:
+        if st.button("🧪 Hỏi về xét nghiệm"):
+            st.session_state.messages.append({
+                "role": "user", 
+                "content": "Glucose 150 mg/dL có cao không?"
+            })
+            st.rerun()
+    
+    with col3:
+        if st.button("🩺 Hỏi về triệu chứng"):
+            st.session_state.messages.append({
+                "role": "user",
+                "content": "Tôi bị đau đầu và chóng mặt"
+            })
+            st.rerun()
+    
+    # Clear chat
+    if st.session_state.messages:
+        if st.button("🗑️ Xóa cuộc trò chuyện", type="secondary"):
+            st.session_state.messages = []
+            st.rerun()
+    
+    # Footer
+    st.markdown("---")
+    st.caption("⚠️ Thông tin chỉ mang tính tham khảo, hãy tham khảo bác sĩ chuyên khoa")
+
+if __name__ == "__main__":
+    main()
