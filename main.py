@@ -11,6 +11,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from chroma_integration import MedicalChromaDB
 import text_to_speech
+import speed_to_text as sp
  
 # # Load environment variables
 load_dotenv()
@@ -798,13 +799,23 @@ def main():
                             key="chat_query_type"
                         )
                 with col_output_settings:
-                    with st.expander("⚙️"):
-                        st.selectbox(
-                            "Đầu ra:",
-                            ["Text", "Âm thanh"],
-                            key="chat_output_type"
-                        )
-                    pass
+                    audio_bytes_res = st.audio_input("Speak something...", key="audio_recorder")
+
+                    if audio_bytes_res:
+                        # Display the audio player
+                        st.audio(audio_bytes_res, format="audio/wav")
+                        print("thong hihihahah")
+                        
+                        # Create a download button
+                        # st.download_button(
+                        #     label="Download Audio",
+                        #     data=audio_bytes,
+                        #     file_name="recorded_audio.wav",
+                        #     mime="audio/wav"
+                        # )
+
+                        result = sp.speech_to_text(audio_bytes_res)
+                        print(result)
        
         # Image upload and additional controls outside form
         col1, col2, col3 = st.columns([2, 1, 1])
