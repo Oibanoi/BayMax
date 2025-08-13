@@ -14,7 +14,6 @@ def render_prescription(medicine_items):
     return "\n".join(result)
 
 def render_lab(lab_items):
-    print("labItems", lab_items)
     result = ["🧪 Thông tin kết quả xét nghiệm:"]
     for idx, item in enumerate(lab_items, 1):
         line = f"{idx}. {item.test_name or '[Tên xét nghiệm không xác định]'}, Chỉ số đo được: {item.value or 'Chưa rõ'} {item.unit or ''}"

@@ -12,7 +12,7 @@ from firebase_admin import credentials, firestore
 
 def init_firebase():
     if not firebase_admin._apps:  # Nếu chưa có app nào được khởi tạo
-        cred = credentials.Certificate("/serviceAccountKey.json")
+        cred = credentials.Certificate("baymax-a7a0d-firebase-adminsdk-fbsvc-f00628f505.json")
         firebase_admin.initialize_app(cred)
         print("Firebase initialized.")
     else:
@@ -75,44 +75,49 @@ def analyze_medicine_with_knowledge(ocr_text: str) -> list:
     knowledge_prompt = PromptTemplate(
         input_variables=["ocr_text"],
         template="""
-Bạn là bác sĩ y khoa.
-Dưới đây là nội dung OCR từ ảnh đơn thuốc (có thể chứa nhiều tên thuốc, liều lượng, cách dùng):
-
-{ocr_text}
-
-Yêu cầu:
-1. Xác định tất cả các thuốc có trong nội dung trên (mỗi thuốc là một mục riêng).
-2. Xác định ngày tháng xuất hiện trong tài liệu ví dụ ngày kê đơn (document_date)
-Quy tắc cho trường "document_date":
-- Nếu tài liệu có ngày xét nghiệm → trích xuất đúng ngày đó, format ISO datetime (ví dụ: "2025-08-12T00:00:00").
-- Nếu không có ngày → dùng ngày hiện tại (theo giờ server khi xử lý yêu cầu) và format ISO datetime như trên.
-3. Với mỗi thuốc, cung cấp thông tin theo schema JSON:
-   - medicine_name: giữ nguyên tên thuốc (bao gồm cả hàm lượng nếu có)
-   - effect: tác dụng chính của thuốc
-   - side_effects: tác dụng phụ hoặc lưu ý khi dùng
-   - interaction_with_history: tương tác với tiền sử bệnh của bệnh nhân
-4. Tiền sử bệnh nhân: béo phì
-5. Trả về JSON theo schema:
-{{
-    "document_date": "YYYY-MM-DD",  // ngày tài liệu, nếu không tìm thấy thì dùng ngày hiện tại UTC
-    "medicines": [
-        {{
-            "medicine_name": "...",
-            "effect": "...",
-            "side_effects": "...",
-            "interaction_with_history": "..."
-        }}
-    ]
-}}
-5. Không kèm bất kỳ giải thích hoặc văn bản ngoài JSON.
-
-Chỉ trả về JSON thuần.
-"""
+    Bạn là bác sĩ y khoa.
+    
+    Dưới đây là nội dung OCR từ ảnh đơn thuốc (có thể chứa nhiều tên thuốc, liều lượng, cách dùng):
+    
+    {ocr_text}
+    
+    Yêu cầu:
+    1. Xác định tất cả các thuốc có trong nội dung trên.
+    2. Xác định ngày tháng xuất hiện trong nội dung OCR. ĐẶC BIỆT chú ý lấy đúng ngày kê đơn hoặc ngày xuất hiện cuối cùng trên tài liệu (không lấy các ngày khác như ngày sinh, ngày hẹn tái khám). Đảm bảo chỉ lấy đúng một ngày duy nhất là ngày kê đơn hoặc ngày xuất hiện cuối đơn thuốc.
+        - Nếu tài liệu có ngày kê đơn hoặc ngày xuất hiện cuối cùng trên tài liệu → trích xuất đúng ngày đó.
+        - Format ngày đúng chuẩn ISO datetime, ví dụ: "2025-08-12T00:00:00".
+        - Nếu nhiều ngày xuất hiện: Ưu tiên ngày gần nhất với các từ khoá như “ngày kê đơn”, “ngày”, “ngày cấp”, "date", "prescription date", "issued date", hoặc ngày ở cuối tài liệu.
+        - Nếu không có ngày nào được ghi rõ ràng → dùng ngày, giờ hiện tại ở Việt Nam, format ISO datetime, ví dụ: "2025-08-12T00:00:00".
+        - Tuyệt đối không lấy ngày sinh, ngày tái khám, hoặc các ngày không liên quan.
+    
+    3. Với mỗi thuốc, cung cấp thông tin theo schema JSON sau:
+       - medicine_name: giữ nguyên tên thuốc (bao gồm cả hàm lượng nếu có)
+       - effect: tác dụng chính của thuốc
+       - side_effects: tác dụng phụ hoặc lưu ý khi dùng
+       - interaction_with_history: tương tác với tiền sử bệnh của bệnh nhân
+    
+    4. Tiền sử bệnh nhân: béo phì
+    
+    5. Trả về JSON duy nhất theo schema:
+    {{
+        "document_date": "YYYY-MM-DDTHH:MM:SS",  // ngày tài liệu, nếu không tìm thấy thì dùng ngày hiện tại ở Việt Nam
+        "medicines": [
+            {{
+                "medicine_name": "...",
+                "effect": "...",
+                "side_effects": "...",
+                "interaction_with_history": "..."
+            }}
+        ]
+    }}
+    
+    6. Không kèm bất kỳ giải thích hoặc văn bản ngoài JSON. Chỉ trả về JSON thuần.
+    """
     )
+
 
     chain = knowledge_prompt | llm.with_structured_output(MedicineList)
     result = chain.invoke({"ocr_text": ocr_text})
-    # result là MedicineList (Pydantic), trả về list of MedicineItem
     return result  # list[MedicineItem]
 
 
@@ -133,9 +138,9 @@ def analyze_lab_with_knowledge(lab_text: str) -> list:
     Tiền sử bệnh nhân: béo phì
     
     Yêu cầu:
-    1. Xác định ngày tháng xuất hiện trong tài liệu (ví dụ ngày xét nghiệm).
+    1. Xác định thời gian (ngày tháng) xuất hiện trong tài liệu document_date (ví dụ ngày thực hiện xét nghiệm)
     * Chuẩn hóa sang định dạng YYYY-MM-DD nếu có.
-    * Nếu không tìm thấy hoặc không chắc chắn, để null.
+    * Nếu không tìm thấy thì trả về null.
     2. Xác định từng xét nghiệm riêng biệt.
     3. Với mỗi chỉ số, kiểm tra tính hợp lý của các thông tin sau: 
     * Tên chỉ số

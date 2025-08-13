@@ -178,8 +178,8 @@ def main():
                 response = result.get('ai_response', 'Không có phản hồi')
                 topic = result.get('topic_classified', 'unknown')
                 
-                # Generate audio
-                audio_bytes = text_to_speech.run_audio(response)
+            # Generate audio
+            audio_bytes = text_to_speech.run_audio(response)
             
             # Add AI response to messages
             st.session_state.messages.append({

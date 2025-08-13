@@ -15,6 +15,8 @@ from langchain.chains import LLMChain
 from image_analysis.core import process_image_pipeline
 from image_analysis.render import render_prescription, render_lab
 from image_analysis.schemas import LabList
+from result_analysis.core import handle_get_result, handle_compare_list_result, handle_compare_list_medicines
+from result_analysis.render import render_latest_result, render_lab_comparison, render_latest_prescription
 
 # # Load environment variables
 load_dotenv()
@@ -219,11 +221,14 @@ class MedGuideAI:
 Classify the following medical query into one of these categories:
 - symptoms: Questions about symptoms, signs, or medical conditions
 - drug_groups: Questions about medications, drugs, or prescriptions
-- lab_results: Questions about test results, lab values, or medical examinations
+- get_prescription: Question about getting prescriptions
+- get_lab_results: Question about getting lab results
+- compare_prescription: Question about comparing prescriptions
+- compare_lab_results: Question about comparing lab results
 
 Query: "{user_input}"
 
-Return only the category name (symptoms/drug_groups/lab_results).
+Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/compare_prescription/compare_lab_results).
 """
             
             response = self.client.chat.completions.create(
@@ -234,51 +239,69 @@ Return only the category name (symptoms/drug_groups/lab_results).
             )
             
             category = response.choices[0].message.content.strip().lower()
-            return category if category in ['symptoms', 'drug_groups', 'lab_results'] else 'symptoms'
+            return category if category in ['symptoms', 'drug_groups', 'get_prescription', 'get_lab_results', 'compare_prescription', 'compare_lab_results'] else 'symptoms'
             
         except Exception as e:
             return 'symptoms'  # Default fallback
-    
+
     def process_user_query(self, user_input: str):
         """Main processing pipeline: classify -> query -> generate"""
         try:
             # Step 1: Text classification
             topic = self.classify_user_query(user_input)
             print("topic:", topic)
+            search_results=""
+            ai_response = "❌ Không tìm thấy kết quả phù hợp."
             # Step 2: Query rel evant collection
-            if topic == 'symptoms':
-                search_results = self.chroma_db.search_symptoms(user_input, n_results=3)
-            elif topic == 'drug_groups':
-                search_results = self.chroma_db.search_drug_groups(user_input, n_results=3)
-            else:  # lab_results
-                search_results = self.chroma_db.search_lab_results(user_input, n_results=3)
-            print("search_results:", search_results)
-            # Step 3: Text generation with context
-            context_info = "\n".join(search_results['documents'][0]) if search_results['documents'] else "No relevant information found"
-            
-            generation_prompt = f"""
-Based on the following medical information, provide a helpful response to the user's question.
+            if topic == "get_lab_results":
+                latest_lab_results = handle_get_result("lab")
+                if latest_lab_results is not None:
+                    ai_response = render_latest_result(latest_lab_results)
+            elif topic == "compare_lab_results":
+                latest_lab_results = handle_get_result("lab", 2)
+                prompt_result =  handle_compare_list_result(latest_lab_results)
+                if prompt_result is not None:
+                    ai_response = render_lab_comparison(prompt_result)
+            elif topic == "get_prescription":
+                latest_prescription_result = handle_get_result("prescription")
+                print("latest_prescription_result", latest_prescription_result)
+                ai_response = render_latest_prescription(latest_prescription_result)
+            elif topic == "compare_prescription":
+                latest_prescription_result = handle_get_result("prescription", 2)
+                ai_response = handle_compare_list_medicines(latest_prescription_result)
+            else:
+                if topic == 'symptoms':
+                    search_results = self.chroma_db.search_symptoms(user_input, n_results=3)
+                elif topic == 'drug_groups':
+                    search_results = self.chroma_db.search_drug_groups(user_input, n_results=3)
 
-User Question: {user_input}
-Topic Category: {topic}
+                print("search_results:", search_results)
+                # Step 3: Text generation with context
+                context_info = "\n".join(search_results['documents'][0]) if search_results['documents'] else "No relevant information found"
 
-Relevant Information:
-{context_info}
+                generation_prompt = f"""
+                    Based on the following medical information, provide a helpful response to the user's question.
+                    
+                    User Question: {user_input}
+                    Topic Category: {topic}
+                    
+                    Relevant Information:
+                    {context_info}
+                    
+                    Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là thông tin tham khảo, bạn nên tham khảo bác sĩ để có hướng điều trị chính xác"
+                    """
 
-Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là thông tin tham khảo, bạn nên tham khảo bác sĩ để có hướng điều trị chính xác"
-"""
+                response = self.client.chat.completions.create(
+                    model="GPT-4o-mini",
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": generation_prompt}
+                    ],
+                    max_tokens=1000,
+                    temperature=0.3
+                )
             
-            response = self.client.chat.completions.create(
-                model="GPT-4o-mini",
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": generation_prompt}
-                ],
-                max_tokens=1000,
-                temperature=0.3
-            )
-            
-            ai_response = response.choices[0].message.content
+                ai_response = response.choices[0].message.content
 
             # # thong's code start
             print("ai_response: " + ai_response)
