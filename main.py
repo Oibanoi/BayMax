@@ -1,10 +1,8 @@
 import streamlit as st
-import os
 import json
 import base64
 from openai import AzureOpenAI
 from PIL import Image
-import io
 from datetime import datetime
 from typing import List, Dict, Any
 import pandas as pd
@@ -12,7 +10,14 @@ from dotenv import load_dotenv
 from chroma_integration import MedicalChromaDB
 import text_to_speech
 import speed_to_text as sp
- 
+
+from langchain.chains import LLMChain
+from image_analysis.core import process_image_pipeline
+from image_analysis.render import render_prescription, render_lab
+from image_analysis.schemas import LabList
+from result_analysis.core import handle_get_result, handle_compare_list_result, handle_compare_list_medicines
+from result_analysis.render import render_latest_result, render_lab_comparison, render_latest_prescription
+
 # # Load environment variables
 load_dotenv()
 # Setup session_state for audio caching
@@ -216,11 +221,14 @@ class MedGuideAI:
 Classify the following medical query into one of these categories:
 - symptoms: Questions about symptoms, signs, or medical conditions
 - drug_groups: Questions about medications, drugs, or prescriptions
-- lab_results: Questions about test results, lab values, or medical examinations
+- get_prescription: Question about getting prescriptions
+- get_lab_results: Question about getting lab results
+- compare_prescription: Question about comparing prescriptions
+- compare_lab_results: Question about comparing lab results
 
 Query: "{user_input}"
 
-Return only the category name (symptoms/drug_groups/lab_results).
+Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/compare_prescription/compare_lab_results).
 """
             
             response = self.client.chat.completions.create(
@@ -231,51 +239,69 @@ Return only the category name (symptoms/drug_groups/lab_results).
             )
             
             category = response.choices[0].message.content.strip().lower()
-            return category if category in ['symptoms', 'drug_groups', 'lab_results'] else 'symptoms'
+            return category if category in ['symptoms', 'drug_groups', 'get_prescription', 'get_lab_results', 'compare_prescription', 'compare_lab_results'] else 'symptoms'
             
         except Exception as e:
             return 'symptoms'  # Default fallback
-    
+
     def process_user_query(self, user_input: str):
         """Main processing pipeline: classify -> query -> generate"""
         try:
             # Step 1: Text classification
             topic = self.classify_user_query(user_input)
             print("topic:", topic)
+            search_results=""
+            ai_response = "❌ Không tìm thấy kết quả phù hợp."
             # Step 2: Query rel evant collection
-            if topic == 'symptoms':
-                search_results = self.chroma_db.search_symptoms(user_input, n_results=3)
-            elif topic == 'drug_groups':
-                search_results = self.chroma_db.search_drug_groups(user_input, n_results=3)
-            else:  # lab_results
-                search_results = self.chroma_db.search_lab_results(user_input, n_results=3)
-            print("search_results:", search_results)
-            # Step 3: Text generation with context
-            context_info = "\n".join(search_results['documents'][0]) if search_results['documents'] else "No relevant information found"
-            
-            generation_prompt = f"""
-Based on the following medical information, provide a helpful response to the user's question.
+            if topic == "get_lab_results":
+                latest_lab_results = handle_get_result("lab")
+                if latest_lab_results is not None:
+                    ai_response = render_latest_result(latest_lab_results)
+            elif topic == "compare_lab_results":
+                latest_lab_results = handle_get_result("lab", 2)
+                prompt_result =  handle_compare_list_result(latest_lab_results)
+                if prompt_result is not None:
+                    ai_response = render_lab_comparison(prompt_result)
+            elif topic == "get_prescription":
+                latest_prescription_result = handle_get_result("prescription")
+                print("latest_prescription_result", latest_prescription_result)
+                ai_response = render_latest_prescription(latest_prescription_result)
+            elif topic == "compare_prescription":
+                latest_prescription_result = handle_get_result("prescription", 2)
+                ai_response = handle_compare_list_medicines(latest_prescription_result)
+            else:
+                if topic == 'symptoms':
+                    search_results = self.chroma_db.search_symptoms(user_input, n_results=3)
+                elif topic == 'drug_groups':
+                    search_results = self.chroma_db.search_drug_groups(user_input, n_results=3)
 
-User Question: {user_input}
-Topic Category: {topic}
+                print("search_results:", search_results)
+                # Step 3: Text generation with context
+                context_info = "\n".join(search_results['documents'][0]) if search_results['documents'] else "No relevant information found"
 
-Relevant Information:
-{context_info}
+                generation_prompt = f"""
+                    Based on the following medical information, provide a helpful response to the user's question.
+                    
+                    User Question: {user_input}
+                    Topic Category: {topic}
+                    
+                    Relevant Information:
+                    {context_info}
+                    
+                    Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là thông tin tham khảo, bạn nên tham khảo bác sĩ để có hướng điều trị chính xác"
+                    """
 
-Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là thông tin tham khảo, bạn nên tham khảo bác sĩ để có hướng điều trị chính xác"
-"""
+                response = self.client.chat.completions.create(
+                    model="GPT-4o-mini",
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": generation_prompt}
+                    ],
+                    max_tokens=1000,
+                    temperature=0.3
+                )
             
-            response = self.client.chat.completions.create(
-                model="GPT-4o-mini",
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": generation_prompt}
-                ],
-                max_tokens=1000,
-                temperature=0.3
-            )
-            
-            ai_response = response.choices[0].message.content
+                ai_response = response.choices[0].message.content
 
             # # thong's code start
             print("ai_response: " + ai_response)
@@ -402,109 +428,24 @@ Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là 
     def analyze_medical_image(self, image_file, query_type="general"):
         """Phân tích hình ảnh y tế với Vision API"""
         try:
-            # Encode image
-            base64_image = self.encode_image(image_file)
-            if not base64_image:
-                return "Không thể đọc được hình ảnh. Vui lòng kiểm tra lại file."
-           
-            # Tùy chỉnh prompt theo loại phân tích
-            if query_type == "prescription":
-                analysis_prompt = """
-                Đọc thông tin đơn thuốc trong hình ảnh và trích xuất dữ liệu cơ bản:
-                - Tên sản phẩm (drug_name)
-                - Liều lượng ghi trên đơn (dosage)
-                - Hướng dẫn sử dụng (frequency)
-                - Thời gian được ghi (duration)
-               
-                Chỉ đọc và trích xuất thông tin có sẵn, không diễn giải hoặc phân tích.
-                """
-            elif query_type == "lab_result":
-                analysis_prompt = """
-                Đọc kết quả xét nghiệm trong hình ảnh và trích xuất các số liệu:
-                - Tên mục xét nghiệm (test_name)
-                - Số đo (value)
-                - Đơn vị đo (unit)
-                - Khoảng tham chiếu nếu có (reference_range)
-               
-                Chỉ đọc và ghi lại thông tin có trong hình, không giải thích ý nghĩa.
-                """
-            else:
-                analysis_prompt = """
-                Xem hình ảnh và xác định đây là loại tài liệu gì (đơn thuốc, kết quả xét nghiệm, v.v.).
-                Sau đó đọc và trích xuất thông tin cơ bản có trong tài liệu.
-                """
-           
-            # Get context
-            context_summary = self.get_context_summary()
-            enhanced_prompt = f"""
-            CONTEXT BỆNH NHÂN:
-            {context_summary}
-           
-            YÊU CẦU: {analysis_prompt}
-            """
-           
-            messages = [
-                {"role": "system", "content": self.system_prompt},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": enhanced_prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ]
-           
-            response = self.client.chat.completions.create(
-                model="GPT-4o-mini",
-                messages=messages,
-                tools=[{"type": "function", "function": func} for func in self.functions],
-                tool_choice="auto",
-                max_tokens=1500,
-                temperature=0.3
-            )
-           
-            response_message = response.choices[0].message
-           
-            if response_message.tool_calls:
-                # Xử lý tool calls từ vision analysis
-                tool_call = response_message.tool_calls[0]
-                func_name = tool_call.function.name
-                func_args = json.loads(tool_call.function.arguments)
-               
-                # Gọi function tương ứng
-                if func_name == "analyze_lab_results":
-                    result = self.analyze_lab_results(**func_args)
-                elif func_name == "analyze_prescription":
-                    result = self.analyze_prescription(**func_args)
+            result = process_image_pipeline(image_file)
+            ai_response = ""
+
+            if result:
+                if result["doc_type"] == "đơn thuốc":
+                    meds = result["structured_data"]  # chắc chắn là list
+                    ai_response = render_prescription(meds.medicines)
+                elif result["doc_type"] == "kết quả xét nghiệm":
+                    labs_structured: LabList = result["structured_data"]  # đây là LabList object
+                    labs = labs_structured.lab  # lấy list LabItem bên trong
+                    ai_response = render_lab(labs)
                 else:
-                    result = "Function không được hỗ trợ cho phân tích hình ảnh"
-               
-                # Tạo response cuối (using tool role)
-                final_messages = messages + [
-                    response_message,
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result
-                    }
-                ]
-               
-                final_response = self.client.chat.completions.create(
-                    model="GPT-4o-mini",
-                    messages=final_messages,
-                    max_tokens=1000,
-                    temperature=0.3
-                )
-               
-                return final_response.choices[0].message.content
+                    ai_response = "❓ Loại tài liệu chưa được hỗ trợ."
             else:
-                return response_message.content
-               
+                ai_response = "Không nhận diện được nội dung từ ảnh."
+
+            return ai_response
+
         except Exception as e:
             return f"Lỗi khi phân tích hình ảnh: {str(e)}"
     def analyze_lab_results(self, test_results: List[Dict], patient_age: int = None, patient_gender: str = None):
@@ -805,7 +746,7 @@ def main():
                         # Display the audio player
                         st.audio(audio_bytes_res, format="audio/wav")
                         print("thong hihihahah")
-                        
+
                         # Create a download button
                         # st.download_button(
                         #     label="Download Audio",
