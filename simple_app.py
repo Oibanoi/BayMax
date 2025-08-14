@@ -4,6 +4,7 @@ from datetime import datetime
 from PIL import Image
 from main import MedGuideAI
 import text_to_speech
+import speed_to_text as sp
 
 # Page configuration
 st.set_page_config(
@@ -16,6 +17,9 @@ st.set_page_config(
 @st.cache_resource
 def load_ai():
     return MedGuideAI()
+
+if "audio_record_bytes" not in st.session_state:
+    st.session_state.audio_record_bytes = None
 
 def main():
     # Header
@@ -106,7 +110,7 @@ def main():
     st.markdown("---")
 
     # Combined input area with image upload
-    col1, col2 = st.columns([6, 4])
+    col1, col2, col3 = st.columns([6, 4, 4])
     
     with col1:
         # Chat input
@@ -125,6 +129,34 @@ def main():
             key=upload_key,
             label_visibility="collapsed"
         )
+    with col3:
+        colRecord, colBtn = st.columns([1,1])
+        with colRecord:
+            # store audio_recorded data
+            audio_bytes_ = st.audio_input("Speak something...", key="audio_recorder")
+            if audio_bytes_:
+                st.audio(audio_bytes_)
+                st.session_state.audio_record_bytes = audio_bytes_
+                # result = sp.speech_to_text_raw_bytes(audio_bytes)
+                # if result is not None:
+                #     st.session_state.audio_record_text = result
+
+        with colBtn:
+            if st.button("Send"):
+                if st.session_state.audio_record_bytes is not None:
+                    
+                    audio_text =  sp.speech_to_text_raw_bytes(st.session_state.audio_record_bytes)
+                    
+                    audio_content = audio_text
+                    print(audio_content)
+                    st.session_state.audio_record_bytes = None
+
+                    st.session_state.messages.append({
+                        "role": "user",
+                        "content":  audio_content
+                    })
+
+                    st.session_state.processing = True
 
     # Show image preview when uploaded
     if uploaded_file and not st.session_state.get('processing_image', False):

@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+import os
 import base64
 from openai import AzureOpenAI
 from PIL import Image
@@ -41,8 +42,8 @@ class MedGuideAI:
         # Initialize Azure OpenAI client
         self.client = AzureOpenAI(
             api_version="2024-07-01-preview",
-            azure_endpoint="https://aiportalapi.stu-platform.live/jpe",
-            api_key="sk-dEyinSJuZ8V_u8gKuPksuA",
+            azure_endpoint=os.getenv("OPENAI_ENDPOINT"),
+            api_key=os.getenv("OPENAI_API_KEY"),
         )
         
         # Initialize ChromaDB
