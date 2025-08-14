@@ -21,10 +21,10 @@ def main():
     # Header
     st.title("🏥 MedGuide AI")
     st.markdown("### Tư vấn y tế thông minh với AI")
-    
+
     # Initialize
     ai = load_ai()
-    
+
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     if 'processing' not in st.session_state:
@@ -43,7 +43,7 @@ def main():
         st.session_state.processing_image = False
     if 'temp_image' not in st.session_state:
         st.session_state.temp_image = None
-    
+
     # Welcome message - show full intro on first visit, short version afterwards
     if not st.session_state.messages:
         st.info("""
@@ -61,52 +61,52 @@ def main():
             """)
     else:
         st.info("### Tư vấn y tế thông minh với AI")
-    
+
     # Display chat history with container for better scrolling
     if st.session_state.messages:
         st.markdown("### 💬 Cuộc trò chuyện")
-        
+
         # Create container for chat messages
         chat_container = st.container()
         with chat_container:
             for message in st.session_state.messages:
                 with st.chat_message(message["role"]):
                     st.write(message["content"])
-                    
+
                     # Show image if exists
                     if "image" in message:
                         st.image(message["image"], width=300)
-                    
+
                     # Show classification info
                     if message["role"] == "assistant" and "topic" in message:
                         topic_icons = {
                             'symptoms': '🩺',
-                            'drug_groups': '💊', 
+                            'drug_groups': '💊',
                             'lab_results': '🧪',
                             'unknown': '❓'
                         }
                         st.caption(f"{topic_icons.get(message['topic'], '❓')} {message['topic']}")
-                    
+
                     # Add audio player for assistant messages
                     if message["role"] == "assistant" and "audio" in message:
                         st.audio(message["audio"], format="audio/mp3")
-    
+
     # Show processing indicators right after chat history
     if st.session_state.get('processing', False):
         with st.chat_message("assistant"):
             with st.spinner("🤖 Đang xử lý..."):
                 st.write("🤖 Đang xử lý câu hỏi của bạn...")
-    
+
     if st.session_state.get('processing_image', False):
         with st.chat_message("assistant"):
             with st.spinner("🔍 Đang phân tích hình ảnh..."):
                 st.write("🔍 Đang phân tích hình ảnh y tế...")
-    
+
     # Input section at bottom
     st.markdown("---")
-    
+
     # Combined input area with image upload
-    col1, col2 = st.columns([4, 1])
+    col1, col2 = st.columns([6, 4])
     
     with col1:
         # Chat input
@@ -114,7 +114,7 @@ def main():
             placeholder="Nhập câu hỏi y tế... (Enter để gửi)"
         )
         text_submit = bool(user_text)
-    
+
     with col2:
         # Use dynamic key to clear file uploader after submit
         upload_key = f"file_upload_{st.session_state.get('upload_counter', 0)}"
@@ -125,17 +125,17 @@ def main():
             key=upload_key,
             label_visibility="collapsed"
         )
-    
+
     # Show image preview when uploaded
     if uploaded_file and not st.session_state.get('processing_image', False):
         col1, col2 = st.columns([1, 3])
-        
+
         with col1:
             st.image(uploaded_file, width=120, caption="Hình ảnh đã chọn")
-        
+
         with col2:
             st.info("📷 Hình ảnh đã chọn! Nhập câu hỏi hoặc nhấn Enter để phân tích.")
-    
+
     # Process text input (with or without image)
     if text_submit and (user_text.strip() or uploaded_file):
         # Determine content and processing type
@@ -157,7 +157,7 @@ def main():
             })
             st.session_state.processing = True
         st.rerun()
-    
+
     # Handle processing state (background processing)
     if st.session_state.get('processing', False):
         # Get the last user message
@@ -166,49 +166,49 @@ def main():
             if msg["role"] == "user":
                 last_user_msg = msg["content"]
                 break
-        
+
         if last_user_msg:
             # Process with AI (no UI here, just processing)
             result = ai.process_user_query(last_user_msg)
-            
+
             if "error" in result:
                 response = f"❌ Lỗi: {result['error']}"
                 topic = "error"
             else:
                 response = result.get('ai_response', 'Không có phản hồi')
                 topic = result.get('topic_classified', 'unknown')
-                
-            # Generate audio
-            audio_bytes = text_to_speech.run_audio(response)
-            
+
+                # Generate audio
+                audio_bytes = text_to_speech.run_audio(response)
+
             # Add AI response to messages
             st.session_state.messages.append({
-                "role": "assistant", 
+                "role": "assistant",
                 "content": response,
                 "topic": topic,
                 "audio": audio_bytes
             })
-            
+
             # Clear processing state
             st.session_state.processing = False
             st.rerun()
-    
+
     # Clear file uploader after processing
     if (text_submit and uploaded_file) or st.session_state.get('processing_image', False):
         if 'upload_counter' not in st.session_state:
             st.session_state.upload_counter = 0
         st.session_state.upload_counter += 1
-    
+
     # Handle image processing state (background processing)
     if st.session_state.get('processing_image', False):
         # Process with AI (no UI here, just processing)
         temp_image = st.session_state.temp_image
         temp_image.seek(0)
         response = ai.analyze_medical_image(temp_image, "general")
-        
+
         # Generate audio
         audio_bytes = text_to_speech.run_audio(response)
-        
+
         # Add AI response to messages
         st.session_state.messages.append({
             "role": "assistant",
@@ -216,20 +216,81 @@ def main():
             "topic": "image_analysis",
             "audio": audio_bytes
         })
-        
+
         # Clear processing state and file uploader
         st.session_state.processing_image = False
         st.session_state.temp_image = None
         if 'upload_counter' not in st.session_state:
             st.session_state.upload_counter = 0
         st.session_state.upload_counter += 1
-        
+
         st.rerun()
-    
+
+    # File upload section for Pinecone DB
+    with st.sidebar:
+        st.markdown("### 📁 Thêm tài liệu y tế")
+
+        # Collection selection
+        collection_choice = st.selectbox(
+            "Chọn loại tài liệu:",
+            ["Tự động phân loại", "Triệu chứng", "Thuốc", "Xét nghiệm"],
+            help="AI sẽ tự động phân loại hoặc bạn có thể chọn trước"
+        )
+
+        # File uploader
+        doc_file = st.file_uploader(
+            "Upload file (.txt, .pdf, .docx):",
+            type=['txt', 'pdf', 'docx'],
+            help="Tài liệu y tế để bổ sung cơ sở dữ liệu"
+        )
+
+        if doc_file and st.button("📤 Thêm vào cơ sở dữ liệu", use_container_width=True):
+            with st.spinner("Đang xử lý tài liệu..."):
+                try:
+                    # Read file content
+                    if doc_file.type == "text/plain":
+                        content = str(doc_file.read(), "utf-8")
+                    else:
+                        st.error("Hiện tại chỉ hỗ trợ file .txt")
+                        content = None
+
+                    if content:
+                        # Process with Pinecone DB
+                        if collection_choice == "Tự động phân loại":
+                            additions = ai.pinecone_db.add_file_content_to_db(content, doc_file.name)
+                        else:
+                            # Manual classification
+                            collection_map = {
+                                "Triệu chứng": "symptoms",
+                                "Thuốc": "drug_groups",
+                                "Xét nghiệm": "lab_results"
+                            }
+                            target_collection = collection_map[collection_choice]
+                            additions = ai.pinecone_db.add_to_specific_collection(content, doc_file.name, target_collection)
+
+                        # Check for errors
+                        if "error" in additions:
+                            st.error(f"❌ Lỗi khi thêm dữ liệu: {additions['error']}")
+                            if "No Pinecone connection" in additions['error']:
+                                st.warning("⚠️ Vui lòng tạo file .env với PINECONE_API_KEY của bạn")
+                        elif sum(additions.values()) == 0:
+                            st.warning("⚠️ Không có dữ liệu nào được thêm vào. Kiểm tra nội dung file và kết nối Pinecone.")
+                        else:
+                            st.success(f"✅ Đã thêm: {additions}")
+
+                        # Show collection stats
+                        stats = ai.pinecone_db.get_collection_stats()
+                        st.info(f"📊 Tổng: Triệu chứng({stats['symptoms']}), Thuốc({stats['drug_groups']}), XN({stats['lab_results']})")
+
+                except Exception as e:
+                    st.error(f"❌ Lỗi: {str(e)}")
+
+        st.markdown("---")
+
     # Quick actions - always show for easy access  
     st.markdown("### 🚀 Câu hỏi mẫu:")
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
         if st.button("💊 Hỏi về thuốc"):
             st.session_state.messages.append({
@@ -237,15 +298,15 @@ def main():
                 "content": "Paracetamol có tác dụng gì?"
             })
             st.rerun()
-    
+
     with col2:
         if st.button("🧪 Hỏi về xét nghiệm"):
             st.session_state.messages.append({
-                "role": "user", 
+                "role": "user",
                 "content": "Glucose 150 mg/dL có cao không?"
             })
             st.rerun()
-    
+
     with col3:
         if st.button("🩺 Hỏi về triệu chứng"):
             st.session_state.messages.append({
@@ -253,13 +314,13 @@ def main():
                 "content": "Tôi bị đau đầu và chóng mặt"
             })
             st.rerun()
-    
+
     # Clear chat
     if st.session_state.messages:
         if st.button("🗑️ Xóa cuộc trò chuyện", type="secondary"):
             st.session_state.messages = []
             st.rerun()
-    
+
     # Footer
     st.markdown("---")
     st.caption("⚠️ Thông tin chỉ mang tính tham khảo, hãy tham khảo bác sĩ chuyên khoa")
