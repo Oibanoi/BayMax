@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Dict, Any
 import pandas as pd
 from dotenv import load_dotenv
-from chroma_integration import MedicalChromaDB
+from pinecone_integration import MedicalPineconeDB
 import text_to_speech
  
 # # Load environment variables
@@ -33,9 +33,9 @@ class MedGuideAI:
             azure_endpoint="https://aiportalapi.stu-platform.live/jpe",
             api_key="sk-dEyinSJuZ8V_u8gKuPksuA",
         )
-        
-        # Initialize ChromaDB
-        self.chroma_db = MedicalChromaDB()
+       
+        # Initialize Pinecone DB
+        self.pinecone_db = MedicalPineconeDB()
        
         # Initialize session state for context management
         if 'conversation_history' not in st.session_state:
@@ -207,7 +207,7 @@ class MedGuideAI:
             context_parts.append(f"Dị ứng: {'; '.join(allergies)}")
        
         return "\n".join(context_parts) if context_parts else "Chưa có thông tin bệnh nhân"
-    
+   
     def classify_user_query(self, user_input: str) -> str:
         """Classify user query into topic categories"""
         try:
@@ -216,25 +216,25 @@ Classify the following medical query into one of these categories:
 - symptoms: Questions about symptoms, signs, or medical conditions
 - drug_groups: Questions about medications, drugs, or prescriptions
 - lab_results: Questions about test results, lab values, or medical examinations
-
+ 
 Query: "{user_input}"
-
+ 
 Return only the category name (symptoms/drug_groups/lab_results).
 """
-            
+           
             response = self.client.chat.completions.create(
                 model="GPT-4o-mini",
                 messages=[{"role": "user", "content": classification_prompt}],
                 max_tokens=50,
                 temperature=0
             )
-            
+           
             category = response.choices[0].message.content.strip().lower()
             return category if category in ['symptoms', 'drug_groups', 'lab_results'] else 'symptoms'
-            
+           
         except Exception as e:
             return 'symptoms'  # Default fallback
-    
+   
     def process_user_query(self, user_input: str):
         """Main processing pipeline: classify -> query -> generate"""
         try:
@@ -243,27 +243,27 @@ Return only the category name (symptoms/drug_groups/lab_results).
             print("topic:", topic)
             # Step 2: Query rel evant collection
             if topic == 'symptoms':
-                search_results = self.chroma_db.search_symptoms(user_input, n_results=3)
+                search_results = self.pinecone_db.search_symptoms(user_input, n_results=3)
             elif topic == 'drug_groups':
-                search_results = self.chroma_db.search_drug_groups(user_input, n_results=3)
+                search_results = self.pinecone_db.search_drug_groups(user_input, n_results=3)
             else:  # lab_results
-                search_results = self.chroma_db.search_lab_results(user_input, n_results=3)
+                search_results = self.pinecone_db.search_lab_results(user_input, n_results=3)
             print("search_results:", search_results)
             # Step 3: Text generation with context
             context_info = "\n".join(search_results['documents'][0]) if search_results['documents'] else "No relevant information found"
-            
+           
             generation_prompt = f"""
 Based on the following medical information, provide a helpful response to the user's question.
-
+ 
 User Question: {user_input}
 Topic Category: {topic}
-
+ 
 Relevant Information:
 {context_info}
-
+ 
 Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là thông tin tham khảo, bạn nên tham khảo bác sĩ để có hướng điều trị chính xác"
 """
-            
+           
             response = self.client.chat.completions.create(
                 model="GPT-4o-mini",
                 messages=[
@@ -273,29 +273,29 @@ Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là 
                 max_tokens=1000,
                 temperature=0.3
             )
-            
+           
             ai_response = response.choices[0].message.content
-
+ 
             # # thong's code start
             print("ai_response: " + ai_response)
             st.session_state.audio_bytes = text_to_speech.run_audio(ai_response)
             # # thong's code end
-            
+           
             # Add to conversation history
             self.add_conversation("user", user_input)
             self.add_conversation("assistant", ai_response)
-            
+           
             return {
                 "topic_classified": topic,
                 "search_results": search_results,
                 "ai_response": ai_response,
                 "conversation_id": len(st.session_state.conversation_history)
             }
-            
+           
         except Exception as e:
             error_msg = f"Lỗi xử lý: {str(e)}"
             return {"error": error_msg}
-    
+   
     def encode_image(self, image_file):
         """Encode image to base64 for OpenAI Vision API"""
         try:
@@ -692,8 +692,7 @@ Provide a detailed, helpful response in Vietnamese. Always end with: "Đây là 
         }
        
         return json.dumps(plan, ensure_ascii=False, indent=2)
- 
- 
+
 def main():
     """Main Streamlit application"""
    
@@ -753,7 +752,7 @@ def main():
                         if message.get("function_used"):
                             with st.expander(f"🎯 Đã sử dụng Function: {message['function_used']}"):
                                 st.json(message.get("function_result", {}))
-                        
+                       
                         # Display classification and search results
                         if message.get("topic_classified"):
                             topic_map = {
