@@ -17,6 +17,10 @@ from image_analysis.render import render_prescription, render_lab
 from image_analysis.schemas import LabList
 from result_analysis.core import handle_get_result, handle_compare_list_result, handle_compare_list_medicines
 from result_analysis.render import render_latest_result, render_lab_comparison, render_latest_prescription
+from sched_appointment import AppointmentProcessor
+ 
+AZURE_OPENAI_ENDPOINT="https://aiportalapi.stu-platform.live/jpe"
+AZURE_OPENAI_API_KEY="sk-dEyinSJuZ8V_u8gKuPksuA"
 
 # # Load environment variables
 load_dotenv()
@@ -125,10 +129,11 @@ class MedGuideAI:
                 - get_lab_results: Question about getting lab results
                 - compare_prescription: Question about comparing prescriptions
                 - compare_lab_results: Question about comparing lab results
+                - sched_appointment: Requests to schedule an appointment, including name, date/time and reason for visit
 
                 Query: "{user_input}"
 
-                Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/compare_prescription/compare_lab_results).
+                Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/compare_prescription/compare_lab_results/sched_appointment).
                 """
             
             response = self.client.chat.completions.create(
@@ -139,7 +144,7 @@ class MedGuideAI:
             )
             
             category = response.choices[0].message.content.strip().lower()
-            return category if category in ['symptoms', 'drug_groups', 'get_prescription', 'get_lab_results', 'compare_prescription', 'compare_lab_results'] else 'symptoms'
+            return category if category in ['symptoms', 'drug_groups', 'get_prescription', 'get_lab_results', 'compare_prescription', 'compare_lab_results', 'sched_appointment'] else 'symptoms'
             
         except Exception as e:
             return 'symptoms'  # Default fallback
@@ -152,8 +157,18 @@ class MedGuideAI:
             print("topic:", topic)
             search_results=""
             ai_response = "❌ Không tìm thấy kết quả phù hợp."
+
             # Step 2: Query rel evant collection
-            if topic == "get_lab_results":
+            if topic == 'sched_appointment':
+                print("<duypv10 log> handle function calling to schedule an appointment")
+                processor = AppointmentProcessor(
+                                api_key=AZURE_OPENAI_API_KEY,
+                                azure_endpoint=AZURE_OPENAI_ENDPOINT,
+                                api_version="2024-07-01-preview"
+                            )
+                result = processor.process_with_function_calling(user_input)
+                ai_response = result["ai_response"]
+            elif topic == "get_lab_results":
                 latest_lab_results = handle_get_result("lab")
                 if latest_lab_results is not None:
                     ai_response = render_latest_result(latest_lab_results)
