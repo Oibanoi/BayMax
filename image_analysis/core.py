@@ -29,7 +29,7 @@ db = firestore.client()
 llm = ChatOpenAI(
     base_url=os.getenv("OPENAI_ENDPOINT"),
     api_key=os.getenv("OPENAI_API_KEY"),
-    model=os.getenv("OPENAI_MODEL"),
+    model=os.getenv("OPENAI_MODEL", "text-embedding-3-small"),
 )
 
 # OCR tiếng Việt

@@ -15,6 +15,7 @@ from langchain.chains import LLMChain
 from image_analysis.core import process_image_pipeline
 from image_analysis.render import render_prescription, render_lab
 from image_analysis.schemas import LabList
+from pinecone_integration import MedicalPineconeDB
 from result_analysis.core import handle_get_result, handle_compare_list_result, handle_compare_list_medicines
 from result_analysis.render import render_latest_result, render_lab_comparison, render_latest_prescription
 from sched_appointment import AppointmentProcessor
@@ -46,6 +47,7 @@ class MedGuideAI:
         
         # Initialize ChromaDB
         self.chroma_db = MedicalChromaDB()
+        self.pinecone_db=MedicalPineconeDB()
        
         # Initialize session state for context management
         if 'conversation_history' not in st.session_state:
