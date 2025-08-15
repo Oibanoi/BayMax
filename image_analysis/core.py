@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import firebase_admin
 from firebase_admin import credentials, firestore
+from datetime import datetime
 
 def init_firebase():
     if not firebase_admin._apps:  # Nếu chưa có app nào được khởi tạo
@@ -129,60 +130,47 @@ def analyze_lab_with_knowledge(lab_text: str) -> list:
     knowledge_prompt = PromptTemplate(
         input_variables=["lab_text"],
         template="""
-    Bạn là chuyên gia xét nghiệm y khoa.
-    
-    Dưới đây là nội dung OCR từ một bảng kết quả xét nghiệm y tế:
-    
-    {lab_text}
-    
-    Tiền sử bệnh nhân: béo phì
-    
-    Yêu cầu:
-    1. Xác định thời gian (ngày tháng) xuất hiện trong tài liệu document_date (ví dụ ngày thực hiện xét nghiệm)
-    * Chuẩn hóa sang định dạng YYYY-MM-DD nếu có.
-    * Nếu không tìm thấy thì trả về null.
-    2. Xác định từng xét nghiệm riêng biệt.
-    3. Với mỗi chỉ số, kiểm tra tính hợp lý của các thông tin sau: 
-    * Tên chỉ số
-    * Giá trị đo được
-    * Khoảng tham chiếu
-    * Nếu MỘT TRONG các thông tin trên bị thiếu, không hợp lý hoặc nghi ngờ sai (ví dụ ký tự lạ, không phải số khi cần số, đơn vị không phù hợp, không có đơn vị, khoảng tham chiếu không logic), thì:
-      - Ghi "Chưa rõ" cho các trường sai hoặc thiếu
-      - evaluation = "Chưa rõ"
-      - explanation = "Không đủ thông tin để phân tích"
-    * Nếu tất cả thông tin hợp lý, mới tiến hành so sánh Giá trị đo được với Khoảng tham chiếu:
-      - evaluation = "Ổn" nếu nằm trong khoảng tham chiếu
-      - evaluation = "Không ổn" nếu nằm ngoài khoảng tham chiếu
-      - explanation = Mô tả tác động của chỉ số đó đến sức khỏe bệnh nhân
-    4. Trả về danh sách JSON (list), mỗi phần tử có các trường:
-      - test_name (Tên xét nghiệm)
-      - value (Giá trị đo được)
-      - unit (Đơn vị đo)
-      - range (Khoảng tham chiếu)
-      - evaluation (Đánh giá kết hợp tiền sử bệnh nhân nếu liên quan)
-      - explanation (Mô tả tác động của chỉ số đó đến sức khỏe bệnh nhân)
-    5. Trả về JSON theo schema:
-        {{
-            "document_date": "YYYY-MM-DD",  // ngày tài liệu, nếu không tìm thấy thì dùng ngày hiện tại UTC
-            "lab": [
-                {{
-                    "test_name": "...",
-                    "value": "...",
-                    "unit": "...",
-                    "range": "...",
-                    "evaluation": "...",
-                    "explanation": "..."
-                }}
-            ]
-        }}
-    - Bắt buộc mọi phần tử trong list đều có đầy đủ các trường trên, nế trường nào không có thông tin thì trả về "Chưa rõ".
-    - Chỉ trả về JSON thuần dạng mảng (list), không kèm giải thích bên ngoài.
-    
-    6. Quy tắc cho trường "document_date":
-    - Nếu tài liệu có ngày xét nghiệm → trích xuất đúng ngày đó, format ISO datetime (ví dụ: "2025-08-12T00:00:00").
-    - Nếu không có ngày → dùng ngày hiện tại (theo giờ server khi xử lý yêu cầu) và format ISO datetime như trên.
-    """
+Bạn là chuyên gia xét nghiệm y khoa.
+
+Nội dung OCR từ bảng kết quả xét nghiệm y tế:
+
+{lab_text}
+
+Tiền sử bệnh nhân: béo phì
+
+Yêu cầu:
+
+1.  Nếu gặp trường `document_date`, bạn **luôn** gán giá trị là ngày và giờ hiện tại theo định dạng ISO 8601 (`YYYY-MM-DDTHH:MM:SS`) thay vì lấy từ nội dung OCR.
+2. Xác định từng xét nghiệm riêng biệt:
+    - Mỗi xét nghiệm gồm: test_name, value, unit, range.
+    - Nếu thiếu hoặc không hợp lý (ký tự lạ, đơn vị sai, khoảng không logic):
+        + Ghi "Chưa rõ" cho trường sai/thiếu
+        + evaluation = "Chưa rõ"
+        + explanation = "Không đủ thông tin để phân tích"
+    - Nếu đầy đủ và hợp lý → so sánh value với range:
+        + evaluation = "Ổn" nếu trong khoảng
+        + evaluation = "Không ổn" nếu ngoài khoảng
+        + explanation = Mô tả tác động đến sức khỏe bệnh nhân (xét cả tiền sử bệnh nhân).
+
+3. Trả về JSON đúng schema:
+{{"document_date": "YYYY-MM-DDTHH:MM:SS",
+  "lab": [
+      {{"test_name": "...",
+       "value": "...",
+       "unit": "...",
+       "range": "...",
+       "evaluation": "...",
+       "explanation": "..."}}
+  ]
+}}
+
+4. Quy tắc bổ sung:
+    - Nếu không match được regex ngày hợp lệ → luôn trả về ngày hiện tại VN.
+    - Tuyệt đối không trả về bất kỳ ngày nào trong năm 2023 nếu không xuất hiện trong OCR.
+    - Chỉ trả về JSON thuần, không giải thích bên ngoài.
+"""
     )
+
 
     chain = knowledge_prompt | llm.with_structured_output(LabList)
     return chain.invoke({"lab_text": lab_text})
@@ -201,10 +189,12 @@ def save_lab_results_grouped(lab_list, user_id: str, document_date):
     # Chuyển lab_list (có thể là Pydantic model) thành list dict
     results = [item.model_dump() if hasattr(item, "model_dump") else item for item in lab_list]
 
-    doc_ref = db.collection("lab_results_grouped").document(f"{user_id}_{document_date.strftime('%Y%m%d')}")
+    now = datetime.now()
+
+    doc_ref = db.collection("lab_results_grouped").document(f"{user_id}_{now.strftime('%Y-%m-%d %H:%M:%S')}")
     data = {
         "user_id": user_id,
-        "document_date": document_date,
+        "document_date": now,
         "results": results,
     }
     doc_ref.set(data)
@@ -217,9 +207,6 @@ def save_medicine_list_grouped(medicine_list, user_id: str, document_date):
     - medicine_list: list of MedicineItem (hoặc dict tương tự)
     """
     # Chuyển medicine_list (có thể là Pydantic model) thành list dict
-    print("---go in medicine")
-    print("document_date",document_date)
-    print("medicine_list", medicine_list)
     medicines = [item.model_dump() if hasattr(item, "model_dump") else item for item in medicine_list]
 
     doc_ref = db.collection("medicine_lists_grouped").document(f"{user_id}_{document_date.strftime('%Y%m%d')}")

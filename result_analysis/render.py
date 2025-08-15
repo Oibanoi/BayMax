@@ -11,7 +11,7 @@ def render_latest_result(lab_lists: List[LabList]) -> str:
 
     result_lines = []
     for lab in sorted_labs:
-        result_lines.append(f"📅 Ngày xét nghiệm: {lab['document_date'].strftime('%d/%m/%Y')}  ")
+        result_lines.append(f"📅 Ngày xét nghiệm: {lab['document_date'].strftime('%Y-%m-%d %H:%M:%S')}  ")
         result_lines.append("\n🧪 Kết quả xét nghiệm:")
 
         for idx, item in enumerate(lab["results"], start=1):
