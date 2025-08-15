@@ -37,6 +37,50 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
  
+few_shot_prompt_examples = """
+    Example 1:
+    Previous topic: None
+    Previous message: ""
+    Current message: "Tôi bị đau đầu và buồn nôn"
+    Output: symptoms
+
+    Example 2:
+    Previous topic: sched_appointment
+    Previous message: "Đặt lịch khám răng cho tôi ngày 20/10/2025 lúc 10h sáng"
+    Current message: "Khám đau đầu"
+    Output: sched_appointment
+
+    Example 3:
+    Previous topic: drug_groups
+    Previous message: ""
+    Current message: "Thuốc paracetamol dùng khi nào?"
+    Output: drug_groups
+
+    Example 4:
+    Previous topic: symptoms
+    Previous message: "Tôi bị ho và sốt"
+    Current message: "Uống thuốc gì được?"
+    Output: drug_groups
+
+    Example 5:
+    Previous topic: None
+    Previous message: ""
+    Current message: "Kết quả xét nghiệm glucose của tôi là 180 mg/dL, có bình thường không?"
+    Output: search_lab_results
+
+    Example 6:
+    Previous topic: None
+    Previous message: ""
+    Current message: "So sánh kết quả xét nghiệm cholesterol tháng này và tháng trước"
+    Output: compare_lab_results
+
+    Example 7:
+    Previous topic: None
+    Previous message: ""
+    Current message: "So sánh đơn thuốc bác sĩ A và bác sĩ B kê cho tôi"
+    Output: compare_prescription
+"""
+
 class MedGuideAI:
     def __init__(self):
         # Initialize Azure OpenAI client
@@ -121,23 +165,36 @@ class MedGuideAI:
        
         return "\n".join(context_parts) if context_parts else "Chưa có thông tin bệnh nhân"
     
-    def classify_user_query(self, user_input: str, previous_topic: str = None) -> str:
+    def classify_user_query(self, user_input: str, previous_topic: str = None, previous_message: str = None) -> str:
         """Classify user query into topic categories"""
         try:
             classification_prompt = f"""
-                Classify the following medical query into one of these categories:
-                - symptoms: Questions about symptoms, signs, or medical conditions
-                - drug_groups: Questions about medications, drugs, or prescriptions
-                - get_prescription: Question about getting prescriptions
-                - get_lab_results: Question about getting lab results 
-                - search_lab_results: Questions about lab test values, results interpretation, or asking about specific lab parameters (like glucose, cholesterol, triglyceride, hemoglobin, etc.) with their values and what they mean
-                - compare_prescription: Question about comparing prescriptions
-                - compare_lab_results: Question about comparing lab results, must have the word "compare" or "so sánh" in the query
-                - sched_appointment: Requests to schedule an appointment, including name, date/time and reason for visit
-                - other: Any information that contains a name, date, or time only, or any other irrelevant information.
-                If the query is vague and could relate to the previous topic: {previous_topic}, return that previous topic.
-                Query: "{user_input}"
+                You are a medical query classifier and conversational context analyzer.
+                Your tasks:
+                1. Classify the current query into one of these categories:
+                    Classify the following medical query into one of these categories:
+                    - symptoms: Questions about symptoms, signs, or medical conditions
+                    - drug_groups: Questions about medications, drugs, or prescriptions
+                    - get_prescription: Question about getting prescriptions
+                    - get_lab_results: Question about getting lab results 
+                    - search_lab_results: Questions about lab test values, results interpretation, or asking about specific lab parameters (like glucose, cholesterol, triglyceride, hemoglobin, etc.) with their values and what they mean
+                    - compare_prescription: Question about comparing prescriptions
+                    - compare_lab_results: Question about comparing lab results, must have the word "compare" or "so sánh" in the query
+                    - sched_appointment: Requests to schedule an appointment, including name, date/time and reason for visit
+                    - other: Any information that contains a name, date, or time only, or any other irrelevant information.
 
+                2. If the query is vague, incomplete, or clearly a follow-up to the previous conversation and still relevant, return the previous topic.
+
+                Previous topic category: {previous_topic}
+                Previous user message: "{previous_message}"
+                Current user message: "{user_input}"
+
+                A follow-up means:
+                - The current message refers to information in the previous message without repeating all the details
+                - It continues the same intent or subject
+                - It doesn't introduce a completely new topic
+
+                Few-shot examples: {few_shot_prompt_examples}
                 Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/search_lab_results/compare_prescription/compare_lab_results/sched_appointment/other).
                 """
             
@@ -154,36 +211,6 @@ class MedGuideAI:
         except Exception as e:
             return 'other'  # Default fallback
 
-    def detect_followup(self, user_input: str, previous_message: str, previous_topic: str) -> bool:
-        try:
-            followup_prompt = f"""
-            You are a classifier for conversational context.
-            Determine if the following query is a follow-up to the previous conversation.
-
-            Previous topic category: {previous_topic}
-            Previous user message: "{previous_message}"
-            Current user message: "{user_input}"
-
-            A follow-up means:
-            - The current message refers to information in the previous message without repeating all the details
-            - It continues the same intent or subject
-            - It doesn't introduce a completely new topic
-
-            Respond only with "yes" or "no".
-            """
-
-            response = self.client.chat.completions.create(
-                model="GPT-4o-mini",
-                messages=[{"role": "user", "content": followup_prompt}],
-                max_tokens=5,
-                temperature=0
-            )
-
-            return response.choices[0].message.content.strip().lower() == "yes"
-
-        except Exception:
-            return False
-
 
     def process_user_query(self, user_input: str):
         """Main processing pipeline: classify -> query -> generate"""
@@ -192,18 +219,8 @@ class MedGuideAI:
             previous_topic = getattr(st.session_state, "current_topic", None)
             previous_message = getattr(st.session_state, "previous_user_message", "")
 
-            topic = self.classify_user_query(user_input, previous_topic)
-
-            if topic == "other" and previous_topic:
-                print("<duypv10 log> -----> detect follow-up the user message")
-                if self.detect_followup(user_input, previous_message, previous_topic):
-                    topic = previous_topic
-                else:
-                    st.session_state.current_topic = None
-            else:
-                st.session_state.current_topic = topic
-
-            # Lưu lại để câu sau dùng
+            topic = self.classify_user_query(user_input, previous_topic, previous_message)
+            st.session_state.current_topic = topic
             st.session_state.previous_user_message = user_input
 
             print("<duypv10 log> current topic:", topic)
