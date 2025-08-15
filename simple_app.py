@@ -89,7 +89,7 @@ def main():
                             'lab_results': '🧪',
                             'unknown': '❓'
                         }
-                        st.caption(f"{topic_icons.get(message['topic'], '❓')} {message['topic']}")
+                        # st.caption(f"{topic_icons.get(message['topic'], '❓')} {message['topic']}")
 
                     # Add audio player for assistant messages
                     if message["role"] == "assistant" and "audio" in message:
@@ -201,6 +201,7 @@ def main():
 
         if last_user_msg:
             # Process with AI (no UI here, just processing)
+            print("<duypv10 log> last_user_msg: ", last_user_msg)
             result = ai.process_user_query(last_user_msg)
 
             if "error" in result:

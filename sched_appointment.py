@@ -41,7 +41,10 @@ def schedule_appointment(date: str, time: str, patient_name: str, note: str = ""
             f"- Người đặt lịch: {patient_name}\n"
             f"- Ngày khám: {formatted_date}\n"
             f"- Giờ khám: {time}\n"
-            f"- Mục khám: {note}"
+            f"- Mục khám: {note}\n"
+            "\nThông tin liên hệ:\n"
+            "\n📍 123 Thụy Khuê, Phường Tây Hồ, TP Hà Nội\n"
+            "\n📞 Hotline (24/24): 0912345678\n"
         )
     except ValueError:
         return "❌ Sai định dạng ngày hoặc giờ. Dùng YYYY-MM-DD và HH:MM."

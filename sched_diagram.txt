@@ -1,0 +1,27 @@
+User               main.py / process_user_query        AppointmentProcessor         Azure OpenAI (GPT)           handle_function_call / Firebase
+    |                       |                                    |                            |                                       |
+    |---"I want to book a dental appointment"------------------->|                            |                                       |
+    |                       |---process_with_function_calling--->|                            |                                       |
+    |                       |                                    |---Send prompt + schema---->|                                       |
+    |                       |                                    |                            |                                       |
+    |                       |                                    |<--GPT reads schema---------|                                       |
+    |                       |                                    |                            |                                       |
+    |                       |                                    |<--Missing date/time/name---|                                       |
+    |                       |                                    |   => GPT replies:          |                                       |
+    |                       |                                    |  "I need date, time, name."|                                       |
+    |                       |<-- Update session_data (save incomplete context) ---------------|                                       |
+    |<--"I need date, time, patient name..."---------------------|                            |                                       |
+    |                       |                                    |                            |                                       |
+    |---"Date 2025-08-20, 09:00, John Doe"---------------------->|                            |                                       |
+    |                       |---process_with_function_calling--->|                            |                                       |
+    |                       |                                    |---Send prompt + schema---->|                                       |
+    |                       |                                    |                            |                                       |
+    |                       |                                    |<--GPT has all data---------|                                       |
+    |                       |<-- Update session_data (complete context) ----------------------|                                       |
+    |                       |                                    |   => Return tool_calls-----|                                       |
+    |                       |                                    |                            |                                       |
+    |                       |                                    |--------------------------->|---Write to Firebase------------------>|
+    |                       |                                    |                            |<--Return "Booking successful"---------|
+    |<--"Booking successful"-------------------------------------|                            |                                       |
+    |                       |---Reset session_data & context-----|                            |                                       |
+

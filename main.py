@@ -133,10 +133,10 @@ class MedGuideAI:
                 - compare_prescription: Question about comparing prescriptions
                 - compare_lab_results: Question about comparing lab results
                 - sched_appointment: Requests to schedule an appointment, including name, date/time and reason for visit
-
+                - other: Any information that contains a name, date, or time only, or any other irrelevant information.
                 Query: "{user_input}"
 
-                Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/compare_prescription/compare_lab_results/sched_appointment).
+                Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/compare_prescription/compare_lab_results/sched_appointment/other).
                 """
             
             response = self.client.chat.completions.create(
@@ -147,10 +147,10 @@ class MedGuideAI:
             )
             
             category = response.choices[0].message.content.strip().lower()
-            return category if category in ['symptoms', 'drug_groups', 'get_prescription', 'get_lab_results', 'compare_prescription', 'compare_lab_results', 'sched_appointment'] else 'symptoms'
+            return category if category in ['symptoms', 'drug_groups', 'get_prescription', 'get_lab_results', 'compare_prescription', 'compare_lab_results', 'sched_appointment', 'other'] else 'other'
             
         except Exception as e:
-            return 'symptoms'  # Default fallback
+            return 'other'  # Default fallback
 
     def process_user_query(self, user_input: str):
         """Main processing pipeline: classify -> query -> generate"""
@@ -162,7 +162,7 @@ class MedGuideAI:
             ai_response = "❌ Không tìm thấy kết quả phù hợp."
 
             # Step 2: Query rel evant collection
-            if topic == 'sched_appointment':
+            if topic == 'sched_appointment' or topic == 'other':
                 print("<duypv10 log> handle function calling to schedule an appointment")
                 processor = AppointmentProcessor(
                                 api_key=AZURE_OPENAI_API_KEY,
