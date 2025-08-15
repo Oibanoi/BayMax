@@ -1,9 +1,14 @@
+import threading
+import time
 import streamlit as st
 import os
 from datetime import datetime
 from PIL import Image
 from main import MedGuideAI
-import text_to_speech
+# import text_to_speech
+from speech_module.ffmpeg_decoding import AudioPlayer
+from speech_module.tts_mp3_stream import tts_stream
+from speech_module.test_streamlit_stt import speech_to_text
 import speed_to_text as sp
 
 # Page configuration
@@ -12,6 +17,60 @@ st.set_page_config(
     page_icon="🏥",
     layout="centered"
 )
+
+# Define fragments
+@st.fragment
+def playback_controls(message_id: str, message_content: str):
+    """Isolated fragment for managing playback controls for a single message."""
+    # Get or create player reference in session state
+    if 'audio_players' not in st.session_state:
+        st.session_state.audio_players = {}
+    
+    # Initialize player for this message if needed
+    if message_id not in st.session_state.audio_players:
+        st.session_state.audio_players[message_id] = None
+    
+    player = st.session_state.audio_players[message_id]
+    is_playing = player is not None and player.is_playing()
+    
+    # Display appropriate button based on playback state
+    if is_playing:
+        if st.button("⏹️", key=f"stop_{message_id}"):
+            # Stop this specific playback
+            if player:
+                player.stop()
+            # Clear player reference
+            st.session_state.audio_players[message_id] = None
+            st.rerun(scope="fragment")
+            # The fragment will automatically rerun and show the Play button
+            
+        if isinstance(player.playback_thread, threading.Thread) and player.playback_thread.is_alive():
+            # time.sleep(0.1)
+            # st.rerun(scope="fragment")
+            pass
+        else:
+            st.session_state.audio_players[message_id] = None
+        # time.sleep(3)
+        # st.rerun(scope="fragment")
+
+    else:
+        if st.button("🔊", key=f"play_{message_id}"):
+            # First stop any active playback (enforce only one playback at a time)
+            for msg_id, p in st.session_state.audio_players.items():
+                if p is not None:
+                    p.stop()
+                    st.session_state.audio_players[msg_id] = None
+
+            # Create new player for this message
+            player = AudioPlayer()
+            # Start playback in background thread
+            def playback():
+                player.play(tts_stream(message_content))
+            
+            t = threading.Thread(target=playback, daemon=True)
+            st.session_state.audio_players[message_id] = player
+            t.start()
+            st.rerun(scope="fragment")
 
 # Initialize AI
 @st.cache_resource
@@ -73,7 +132,7 @@ def main():
         # Create container for chat messages
         chat_container = st.container()
         with chat_container:
-            for message in st.session_state.messages:
+            for message_index, message in enumerate(st.session_state.messages):
                 with st.chat_message(message["role"]):
                     st.write(message["content"])
 
@@ -92,8 +151,8 @@ def main():
                         # st.caption(f"{topic_icons.get(message['topic'], '❓')} {message['topic']}")
 
                     # Add audio player for assistant messages
-                    if message["role"] == "assistant" and "audio" in message:
-                        st.audio(message["audio"], format="audio/mp3")
+                    if message["role"] == "assistant":
+                        playback_controls(str(message_index), message["content"])
 
     # Show processing indicators right after chat history
     if st.session_state.get('processing', False):
@@ -110,8 +169,28 @@ def main():
     st.markdown("---")
 
     # Combined input area with image upload
-    col1, col2, col3 = st.columns([6, 4, 4])
-    
+    col1, col2 = st.columns([6, 4])
+    audio_bytes_ = st.audio_input("Speak something...", key="audio_recorder")
+    if audio_bytes_:
+        st.audio(audio_bytes_)
+        print(audio_bytes_.size)
+        st.session_state.audio_record_bytes = audio_bytes_
+    if st.button("Send"):
+        if st.session_state.audio_record_bytes is not None:
+            
+            audio_text =  sp.speech_to_text_raw_bytes(st.session_state.audio_record_bytes)
+            
+            audio_content = audio_text
+            print(audio_content)
+            st.session_state.audio_record_bytes = None
+
+            st.session_state.messages.append({
+                "role": "user",
+                "content":  audio_content
+            })
+
+            st.session_state.processing = True
+                    
     with col1:
         # Chat input
         user_text = st.chat_input(
@@ -129,34 +208,7 @@ def main():
             key=upload_key,
             label_visibility="collapsed"
         )
-    with col3:
-        colRecord, colBtn = st.columns([1,1])
-        with colRecord:
-            # store audio_recorded data
-            audio_bytes_ = st.audio_input("Speak something...", key="audio_recorder")
-            if audio_bytes_:
-                st.audio(audio_bytes_)
-                st.session_state.audio_record_bytes = audio_bytes_
-                # result = sp.speech_to_text_raw_bytes(audio_bytes)
-                # if result is not None:
-                #     st.session_state.audio_record_text = result
-
-        with colBtn:
-            if st.button("Send"):
-                if st.session_state.audio_record_bytes is not None:
-                    
-                    audio_text =  sp.speech_to_text_raw_bytes(st.session_state.audio_record_bytes)
-                    
-                    audio_content = audio_text
-                    print(audio_content)
-                    st.session_state.audio_record_bytes = None
-
-                    st.session_state.messages.append({
-                        "role": "user",
-                        "content":  audio_content
-                    })
-
-                    st.session_state.processing = True
+            
 
     # Show image preview when uploaded
     if uploaded_file and not st.session_state.get('processing_image', False):
@@ -212,14 +264,14 @@ def main():
                 topic = result.get('topic_classified', 'unknown')
 
                 # Generate audio
-                audio_bytes = text_to_speech.run_audio(response)
+                # audio_bytes = text_to_speech.run_audio(response)
 
             # Add AI response to messages
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": response,
                 "topic": topic,
-                "audio": audio_bytes
+                # "audio": audio_bytes
             })
 
             # Clear processing state
@@ -240,14 +292,14 @@ def main():
         response = ai.analyze_medical_image(temp_image, "general")
 
         # Generate audio
-        audio_bytes = text_to_speech.run_audio(response)
+        # audio_bytes = text_to_speech.run_audio(response)
 
         # Add AI response to messages
         st.session_state.messages.append({
             "role": "assistant",
             "content": response,
             "topic": "image_analysis",
-            "audio": audio_bytes
+            # "audio": audio_bytes
         })
 
         # Clear processing state and file uploader
@@ -320,33 +372,33 @@ def main():
 
         st.markdown("---")
 
-    # Quick actions - always show for easy access  
-    st.markdown("### 🚀 Câu hỏi mẫu:")
-    col1, col2, col3 = st.columns(3)
+    # # Quick actions - always show for easy access  
+    # st.markdown("### 🚀 Câu hỏi mẫu:")
+    # col1, col2, col3 = st.columns(3)
 
-    with col1:
-        if st.button("💊 Hỏi về thuốc"):
-            st.session_state.messages.append({
-                "role": "user",
-                "content": "Paracetamol có tác dụng gì?"
-            })
-            st.rerun()
+    # with col1:
+    #     if st.button("💊 Hỏi về thuốc"):
+    #         st.session_state.messages.append({
+    #             "role": "user",
+    #             "content": "Paracetamol có tác dụng gì?"
+    #         })
+    #         st.rerun()
 
-    with col2:
-        if st.button("🧪 Hỏi về xét nghiệm"):
-            st.session_state.messages.append({
-                "role": "user",
-                "content": "Glucose 150 mg/dL có cao không?"
-            })
-            st.rerun()
+    # with col2:
+    #     if st.button("🧪 Hỏi về xét nghiệm"):
+    #         st.session_state.messages.append({
+    #             "role": "user",
+    #             "content": "Glucose 150 mg/dL có cao không?"
+    #         })
+    #         st.rerun()
 
-    with col3:
-        if st.button("🩺 Hỏi về triệu chứng"):
-            st.session_state.messages.append({
-                "role": "user",
-                "content": "Tôi bị đau đầu và chóng mặt"
-            })
-            st.rerun()
+    # with col3:
+    #     if st.button("🩺 Hỏi về triệu chứng"):
+    #         st.session_state.messages.append({
+    #             "role": "user",
+    #             "content": "Tôi bị đau đầu và chóng mặt"
+    #         })
+    #         st.rerun()
 
     # Clear chat
     if st.session_state.messages:

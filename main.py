@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 import pandas as pd
 from dotenv import load_dotenv
 from chroma_integration import MedicalChromaDB
-import text_to_speech
+# import text_to_speech
 import speed_to_text as sp
 
 from langchain.chains import LLMChain
@@ -277,7 +277,7 @@ class MedGuideAI:
 
             # # thong's code start
             print("ai_response: " + ai_response)
-            st.session_state.audio_bytes = text_to_speech.run_audio(ai_response)
+            # st.session_state.audio_bytes = text_to_speech.run_audio(ai_response)
             # # thong's code end
             
             # Add to conversation history
