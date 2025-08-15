@@ -121,7 +121,7 @@ class MedGuideAI:
        
         return "\n".join(context_parts) if context_parts else "Chưa có thông tin bệnh nhân"
     
-    def classify_user_query(self, user_input: str) -> str:
+    def classify_user_query(self, user_input: str, previous_topic: str = None) -> str:
         """Classify user query into topic categories"""
         try:
             classification_prompt = f"""
@@ -134,6 +134,7 @@ class MedGuideAI:
                 - compare_lab_results: Question about comparing lab results
                 - sched_appointment: Requests to schedule an appointment, including name, date/time and reason for visit
                 - other: Any information that contains a name, date, or time only, or any other irrelevant information.
+                If the query is vague and could relate to the previous topic: {previous_topic}, return that previous topic.
                 Query: "{user_input}"
 
                 Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/compare_prescription/compare_lab_results/sched_appointment/other).
@@ -152,12 +153,62 @@ class MedGuideAI:
         except Exception as e:
             return 'other'  # Default fallback
 
+    def detect_followup(self, user_input: str, previous_message: str, previous_topic: str) -> bool:
+        try:
+            followup_prompt = f"""
+            You are a classifier for conversational context.
+            Determine if the following query is a follow-up to the previous conversation.
+
+            Previous topic category: {previous_topic}
+            Previous user message: "{previous_message}"
+            Current user message: "{user_input}"
+
+            A follow-up means:
+            - The current message refers to information in the previous message without repeating all the details
+            - It continues the same intent or subject
+            - It doesn't introduce a completely new topic
+
+            Respond only with "yes" or "no".
+            """
+
+            response = self.client.chat.completions.create(
+                model="GPT-4o-mini",
+                messages=[{"role": "user", "content": followup_prompt}],
+                max_tokens=5,
+                temperature=0
+            )
+
+            return response.choices[0].message.content.strip().lower() == "yes"
+
+        except Exception:
+            return False
+
+
     def process_user_query(self, user_input: str):
         """Main processing pipeline: classify -> query -> generate"""
         try:
             # Step 1: Text classification
-            topic = self.classify_user_query(user_input)
-            print("topic:", topic)
+            previous_topic = getattr(st.session_state, "current_topic", None)
+            previous_message = getattr(st.session_state, "previous_user_message", "")
+
+            topic = self.classify_user_query(user_input, previous_topic)
+
+            if topic == "other" and previous_topic:
+                print("<duypv10 log> -----> detect follow-up the user message")
+                if self.detect_followup(user_input, previous_message, previous_topic):
+                    topic = previous_topic
+                else:
+                    st.session_state.current_topic = None
+            else:
+                st.session_state.current_topic = topic
+
+            # Lưu lại để câu sau dùng
+            st.session_state.previous_user_message = user_input
+
+            print("<duypv10 log> current topic:", topic)
+            print("<duypv10 log> previous topic:", previous_topic)
+            print("<duypv10 log> previous user message:", previous_message)
+
             search_results=""
             ai_response = "❌ Không tìm thấy kết quả phù hợp."
 
