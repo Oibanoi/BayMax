@@ -129,15 +129,16 @@ class MedGuideAI:
                 - symptoms: Questions about symptoms, signs, or medical conditions
                 - drug_groups: Questions about medications, drugs, or prescriptions
                 - get_prescription: Question about getting prescriptions
-                - get_lab_results: Question about getting lab results
+                - get_lab_results: Question about getting lab results 
+                - search_lab_results: Questions about lab test values, results interpretation, or asking about specific lab parameters (like glucose, cholesterol, triglyceride, hemoglobin, etc.) with their values and what they mean
                 - compare_prescription: Question about comparing prescriptions
-                - compare_lab_results: Question about comparing lab results
+                - compare_lab_results: Question about comparing lab results, must have the word "compare" or "so sánh" in the query
                 - sched_appointment: Requests to schedule an appointment, including name, date/time and reason for visit
                 - other: Any information that contains a name, date, or time only, or any other irrelevant information.
                 If the query is vague and could relate to the previous topic: {previous_topic}, return that previous topic.
                 Query: "{user_input}"
 
-                Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/compare_prescription/compare_lab_results/sched_appointment/other).
+                Return only the category name (symptoms/drug_groups/get_prescription/get_lab_results/search_lab_results/compare_prescription/compare_lab_results/sched_appointment/other).
                 """
             
             response = self.client.chat.completions.create(
@@ -148,7 +149,7 @@ class MedGuideAI:
             )
             
             category = response.choices[0].message.content.strip().lower()
-            return category if category in ['symptoms', 'drug_groups', 'get_prescription', 'get_lab_results', 'compare_prescription', 'compare_lab_results', 'sched_appointment', 'other'] else 'other'
+            return category if category in ['symptoms', 'drug_groups', 'get_prescription', 'get_lab_results', 'search_lab_results', 'compare_prescription', 'compare_lab_results', 'sched_appointment', 'other'] else 'other'
             
         except Exception as e:
             return 'other'  # Default fallback
@@ -240,9 +241,11 @@ class MedGuideAI:
                 ai_response = handle_compare_list_medicines(latest_prescription_result)
             else:
                 if topic == 'symptoms':
-                    search_results = self.chroma_db.search_symptoms(user_input, n_results=3)
+                    search_results = self.pinecone_db.search_symptoms(user_input, n_results=3)
                 elif topic == 'drug_groups':
-                    search_results = self.chroma_db.search_drug_groups(user_input, n_results=3)
+                    search_results = self.pinecone_db.search_drug_groups(user_input, n_results=3)
+                elif topic == 'search_lab_results':
+                    search_results = self.pinecone_db.search_lab_results(user_input, n_results=3)
 
                 print("search_results:", search_results)
                 # Step 3: Text generation with context
