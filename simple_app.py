@@ -313,63 +313,146 @@ def main():
 
     # File upload section for Pinecone DB
     with st.sidebar:
-        st.markdown("### 📁 Thêm tài liệu y tế")
-
-        # Collection selection
-        collection_choice = st.selectbox(
-            "Chọn loại tài liệu:",
-            ["Tự động phân loại", "Triệu chứng", "Thuốc", "Xét nghiệm"],
-            help="AI sẽ tự động phân loại hoặc bạn có thể chọn trước"
+        st.markdown("### 📁 Quản lý tài liệu y tế")
+        
+        # Tab selection
+        tab_choice = st.radio(
+            "Chọn hành động:",
+            ["📤 Thêm mới", "🔄 Cập nhật", "📋 Danh sách"],
+            horizontal=True
         )
+        
+        if tab_choice == "📤 Thêm mới":
+            # Collection selection
+            collection_choice = st.selectbox(
+                "Chọn loại tài liệu:",
+                ["Tự động phân loại", "Triệu chứng", "Thuốc", "Xét nghiệm"],
+                help="AI sẽ tự động phân loại hoặc bạn có thể chọn trước"
+            )
 
-        # File uploader
-        doc_file = st.file_uploader(
-            "Upload file (.txt, .pdf, .docx):",
-            type=['txt', 'pdf', 'docx'],
-            help="Tài liệu y tế để bổ sung cơ sở dữ liệu"
-        )
+            # File uploader
+            doc_file = st.file_uploader(
+                "Upload file (.txt, .pdf, .docx):",
+                type=['txt', 'pdf', 'docx'],
+                help="Tài liệu y tế để bổ sung cơ sở dữ liệu",
+                key="new_doc_upload"
+            )
 
-        if doc_file and st.button("📤 Thêm vào cơ sở dữ liệu", use_container_width=True):
-            with st.spinner("Đang xử lý tài liệu..."):
-                try:
-                    # Read file content
-                    if doc_file.type == "text/plain":
-                        content = str(doc_file.read(), "utf-8")
-                    else:
-                        st.error("Hiện tại chỉ hỗ trợ file .txt")
-                        content = None
-
-                    if content:
-                        # Process with Pinecone DB
-                        if collection_choice == "Tự động phân loại":
-                            additions = ai.pinecone_db.add_file_content_to_db(content, doc_file.name)
+            if doc_file and st.button("📤 Thêm vào cơ sở dữ liệu", use_container_width=True):
+                with st.spinner("Đang xử lý tài liệu..."):
+                    try:
+                        # Read file content
+                        if doc_file.type == "text/plain":
+                            content = str(doc_file.read(), "utf-8")
                         else:
-                            # Manual classification
-                            collection_map = {
-                                "Triệu chứng": "symptoms",
-                                "Thuốc": "drug_groups",
-                                "Xét nghiệm": "lab_results"
-                            }
-                            target_collection = collection_map[collection_choice]
-                            additions = ai.pinecone_db.add_to_specific_collection(content, doc_file.name, target_collection)
+                            st.error("Hiện tại chỉ hỗ trợ file .txt")
+                            content = None
 
-                        # Check for errors
-                        if "error" in additions:
-                            st.error(f"❌ Lỗi khi thêm dữ liệu: {additions['error']}")
-                            if "No Pinecone connection" in additions['error']:
-                                st.warning("⚠️ Vui lòng tạo file .env với PINECONE_API_KEY của bạn")
-                        elif sum(additions.values()) == 0:
-                            st.warning("⚠️ Không có dữ liệu nào được thêm vào. Kiểm tra nội dung file và kết nối Pinecone.")
-                        else:
-                            st.success(f"✅ Đã thêm: {additions}")
+                        if content:
+                            # Process with Pinecone DB
+                            if collection_choice == "Tự động phân loại":
+                                additions = ai.pinecone_db.add_file_content_to_db(content, doc_file.name)
+                            else:
+                                # Manual classification
+                                collection_map = {
+                                    "Triệu chứng": "symptoms",
+                                    "Thuốc": "drug_groups",
+                                    "Xét nghiệm": "lab_results"
+                                }
+                                target_collection = collection_map[collection_choice]
+                                additions = ai.pinecone_db.add_to_specific_collection(content, doc_file.name, target_collection)
 
-                        # Show collection stats
-                        stats = ai.pinecone_db.get_collection_stats()
-                        st.info(f"📊 Tổng: Triệu chứng({stats['symptoms']}), Thuốc({stats['drug_groups']}), XN({stats['lab_results']})")
+                            # Check for errors
+                            if "error" in additions:
+                                st.error(f"❌ Lỗi khi thêm dữ liệu: {additions['error']}")
+                                if "No Pinecone connection" in additions['error']:
+                                    st.warning("⚠️ Vui lòng tạo file .env với PINECONE_API_KEY của bạn")
+                            elif sum(additions.values()) == 0:
+                                st.warning("⚠️ Không có dữ liệu nào được thêm vào. Kiểm tra nội dung file và kết nối Pinecone.")
+                            else:
+                                st.success(f"✅ Đã thêm: {additions}")
 
-                except Exception as e:
-                    st.error(f"❌ Lỗi: {str(e)}")
-
+                    except Exception as e:
+                        st.error(f"❌ Lỗi: {str(e)}")
+        
+        elif tab_choice == "🔄 Cập nhật":
+            # Get list of existing documents
+            existing_docs = ai.pinecone_db.list_documents()
+            
+            if existing_docs:
+                selected_doc = st.selectbox(
+                    "Chọn tài liệu cần cập nhật:",
+                    existing_docs,
+                    help="Danh sách các tài liệu đã upload"
+                )
+                
+                # Collection selection for update
+                update_collection_choice = st.selectbox(
+                    "Loại tài liệu mới:",
+                    ["Tự động phân loại", "Triệu chứng", "Thuốc", "Xét nghiệm"],
+                    key="update_collection"
+                )
+                
+                # File uploader for update
+                update_file = st.file_uploader(
+                    "Upload file mới (.txt):",
+                    type=['txt'],
+                    help="Nội dung mới để thay thế tài liệu cũ",
+                    key="update_doc_upload"
+                )
+                
+                if update_file and st.button("🔄 Cập nhật tài liệu", use_container_width=True):
+                    with st.spinner(f"Đang cập nhật {selected_doc}..."):
+                        try:
+                            content = str(update_file.read(), "utf-8")
+                            
+                            if update_collection_choice == "Tự động phân loại":
+                                result = ai.pinecone_db.update_document(selected_doc, content)
+                            else:
+                                collection_map = {
+                                    "Triệu chứng": "symptoms",
+                                    "Thuốc": "drug_groups",
+                                    "Xét nghiệm": "lab_results"
+                                }
+                                target_collection = collection_map[update_collection_choice]
+                                result = ai.pinecone_db.update_document(selected_doc, content, target_collection)
+                            
+                            if "error" in result:
+                                st.error(f"❌ Lỗi cập nhật: {result['error']}")
+                            else:
+                                st.success(f"✅ Đã cập nhật {selected_doc}: {result}")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Lỗi: {str(e)}")
+            else:
+                st.info("📄 Chưa có tài liệu nào trong cơ sở dữ liệu")
+        
+        elif tab_choice == "📋 Danh sách":
+            # List existing documents
+            existing_docs = ai.pinecone_db.list_documents()
+            
+            if existing_docs:
+                st.write(f"📁 **Tổng cộng: {len(existing_docs)} tài liệu**")
+                
+                for i, doc in enumerate(existing_docs, 1):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"{i}. {doc}")
+                    with col2:
+                        if st.button("🗑️", key=f"delete_{i}", help=f"Xóa {doc}"):
+                            if ai.pinecone_db.delete_document(doc):
+                                st.success(f"✅ Đã xóa {doc}")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Không thể xóa {doc}")
+            else:
+                st.info("📄 Chưa có tài liệu nào")
+        
+        # Show collection stats
+        st.markdown("---")
+        stats = ai.pinecone_db.get_collection_stats()
+        st.info(f"📊 **Thống kê:** Triệu chứng({stats['symptoms']}), Thuốc({stats['drug_groups']}), XN({stats['lab_results']})")
+        
         st.markdown("---")
 
     # # Quick actions - always show for easy access  

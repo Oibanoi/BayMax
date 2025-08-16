@@ -615,6 +615,78 @@ Return only the category name (symptoms/drug_groups/lab_results).
         except Exception as e:
             print(f"Error getting collection stats: {e}")
             return {"symptoms": 0, "drug_groups": 0, "lab_results": 0}
+    
+    def list_documents(self) -> List[str]:
+        """List all document sources in the database"""
+        if not self.index:
+            return []
+        
+        try:
+            # Query to get unique sources
+            query_response = self.index.query(
+                vector=[0.0] * 1536,  # Dummy vector
+                top_k=1000,  # Get many results
+                include_metadata=True
+            )
+            
+            sources = set()
+            for match in query_response.matches:
+                if 'source' in match.metadata:
+                    sources.add(match.metadata['source'])
+            
+            return sorted(list(sources))
+        except Exception as e:
+            print(f"Error listing documents: {e}")
+            return []
+    
+    def delete_document(self, source_filename: str) -> bool:
+        """Delete all vectors from a specific document"""
+        if not self.index:
+            return False
+        
+        try:
+            # Query vectors by source
+            query_response = self.index.query(
+                vector=[0.0] * 1536,  # Dummy vector
+                top_k=1000,
+                include_metadata=True,
+                filter={"source": source_filename}
+            )
+            
+            # Extract IDs to delete
+            ids_to_delete = [match.id for match in query_response.matches]
+            
+            if ids_to_delete:
+                self.index.delete(ids=ids_to_delete)
+                print(f"✅ Deleted {len(ids_to_delete)} vectors from {source_filename}")
+                return True
+            else:
+                print(f"⚠️ No vectors found for {source_filename}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error deleting document {source_filename}: {e}")
+            return False
+    
+    def update_document(self, source_filename: str, new_content: str, collection_type: str = None) -> Dict[str, int]:
+        """Update document by deleting old version and adding new content"""
+        print(f"🔄 Updating document: {source_filename}")
+        
+        # Step 1: Delete existing document
+        delete_success = self.delete_document(source_filename)
+        if not delete_success:
+            print(f"⚠️ No existing document found for {source_filename}, proceeding with new upload")
+        
+        # Step 2: Add new content
+        if collection_type:
+            # Manual classification
+            result = self.add_to_specific_collection(new_content, source_filename, collection_type)
+        else:
+            # Auto classification
+            result = self.add_file_content_to_db(new_content, source_filename)
+        
+        print(f"✅ Document {source_filename} updated successfully")
+        return result
    
     def add_to_specific_collection(self, content: str, filename: str, collection_type: str) -> Dict[str, int]:
         """Add content directly to specific collection without AI classification"""
